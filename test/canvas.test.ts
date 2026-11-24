@@ -307,25 +307,53 @@ describe('mountMockupCanvas', () => {
     expect(checkoutDot.hidden).toBe(false)
     expect(passkeysDot.hidden).toBe(true)
 
-    // Zoom to a custom scale first so we prove navigation pans ONLY without changing zoom
-    const rootEl = container.querySelector('.mc-root')!
-    rootEl.dispatchEvent(
-      new WheelEvent('wheel', { ctrlKey: true, deltaY: -50, clientX: 500, clientY: 300, cancelable: true }),
-    )
-    const customScale = handle.getViewport().scale
+    // Normal mode (changesMode OFF): arrow keys navigate spatially on the current page and fill-width the target
+    vi.useFakeTimers()
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      vi.advanceTimersByTime(300)
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
+      const a1Scale = handle.getViewport().scale
 
-    // Normal mode (changesMode OFF): arrow keys navigate spatially on the current page
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
-    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
-    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
-    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
-    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('B.1')
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }))
-    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
-    expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      vi.advanceTimersByTime(300)
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
+      const a2FillScale = handle.getViewport().scale
+      // Portrait A.2 (390w) fills width at a larger scale than desktop A.1 (900w)
+      expect(a2FillScale).toBeGreaterThan(a1Scale)
+
+      // Tapping Shift on tall portrait A.2 toggles between fit (full height visible) and fill-width
+      const tapShift = () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }))
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift' }))
+        vi.advanceTimersByTime(300)
+      }
+      tapShift()
+      const a2FitScale = handle.getViewport().scale
+      expect(a2FitScale).toBeLessThan(a2FillScale)
+      tapShift()
+      expect(handle.getViewport().scale).toBeCloseTo(a2FillScale, 4)
+
+      // Shift+other key does NOT trigger shift-tap zoom
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'A', shiftKey: true }))
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift' }))
+      vi.advanceTimersByTime(300)
+      expect(handle.getViewport().scale).toBeCloseTo(a2FillScale, 4)
+
+      // Wrap sideways back to A.1, then Down to B.1, Up back to A.1
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      vi.advanceTimersByTime(300)
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      vi.advanceTimersByTime(300)
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('B.1')
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }))
+      vi.advanceTimersByTime(300)
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
+    } finally {
+      vi.useRealTimers()
+    }
 
     // Keyboard zoom using the two physical keys next to right Shift (Period = out, Slash = in)
     const beforeKeyZoom = handle.getViewport().scale
@@ -335,37 +363,12 @@ describe('mountMockupCanvas', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', key: '.' }))
     expect(handle.getViewport().scale).toBeCloseTo(beforeKeyZoom, 6)
 
-    // Tapping Shift zooms current mockup to fit; tapping Shift again toggles to fill; tapping again returns to fit
-    vi.useFakeTimers()
-    try {
-      const tapShift = () => {
-        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }))
-        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift' }))
-        vi.advanceTimersByTime(300)
-      }
-      tapShift()
-      const fitScale = handle.getViewport().scale
-      tapShift()
-      const fillScale = handle.getViewport().scale
-      expect(fillScale).toBeGreaterThan(fitScale)
-      tapShift()
-      expect(handle.getViewport().scale).toBeCloseTo(fitScale, 4)
-
-      // Shift+other key does NOT trigger shift-tap zoom
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }))
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'A', shiftKey: true }))
-      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift' }))
-      vi.advanceTimersByTime(300)
-      expect(handle.getViewport().scale).toBeCloseTo(fitScale, 4)
-    } finally {
-      vi.useRealTimers()
-    }
-
     // Press 'c' to enter Changes mode
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c' }))
     expect(handle.isChangesMode()).toBe(true)
 
-    // Zoom way out first so we prove Changes navigation zooms to fit the target screen
+    // Zoom way out first so we prove Changes navigation fills width on the target screen
+    const rootEl = container.querySelector('.mc-root')!
     rootEl.dispatchEvent(
       new WheelEvent('wheel', { ctrlKey: true, deltaY: 120, clientX: 500, clientY: 300, cancelable: true }),
     )

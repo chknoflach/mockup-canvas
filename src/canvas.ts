@@ -601,7 +601,7 @@ export function mountMockupCanvas(
     }
     setChangedMenuOpen(false)
     focusedChangedId = target.mockupId
-    goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true, fit: true })
+    goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true, zoom: 'fill' })
     renderChangedControls()
   }
 
@@ -700,7 +700,7 @@ export function mountMockupCanvas(
     const target = list[nextIndex]!
     setChangedMenuOpen(false)
     focusedChangedId = target.mockupId
-    goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true, fit: true })
+    goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true, zoom: 'fill' })
     renderChangedControls()
   }
 
@@ -778,7 +778,7 @@ export function mountMockupCanvas(
     const target = findSpatialNeighbor(activeLayout, originId, direction)
     if (!target) return
     focusedMockupId = target.item.id
-    goTo({ pageId: activePage.id, mockupId: target.item.id, animate: true })
+    goTo({ pageId: activePage.id, mockupId: target.item.id, animate: true, zoom: 'fill' })
   }
 
   changesModeBtn.addEventListener('click', () => setChangesMode(!changesMode))
@@ -1076,7 +1076,7 @@ export function mountMockupCanvas(
     pageId?: string
     mockupId?: string
     animate?: boolean
-    fit?: boolean
+    zoom?: 'pan' | 'fit' | 'fill'
   }): void {
     const resolved = resolveTarget(
       pages,
@@ -1099,9 +1099,13 @@ export function mountMockupCanvas(
       const targetItem = activeLayout.byId.get(resolved.mockupId)
       if (targetItem) {
         focusedMockupId = resolved.mockupId
-        const targetViewport = options.fit
-          ? computeFitViewport(targetItem.rect, width, height, 64)
-          : computePanToTarget(targetItem.rect, viewport.scale, width, height)
+        const mode = options.zoom ?? 'pan'
+        const targetViewport =
+          mode === 'fill'
+            ? computeFillMockup(targetItem.rect, width, height)
+            : mode === 'fit'
+              ? computeFitMockup(targetItem.rect, width, height)
+              : computePanToTarget(targetItem.rect, viewport.scale, width, height)
         animateTo(targetViewport, options.animate ?? !pageChanged)
         syncUrl(resolved.page.id, resolved.mockupId)
         return

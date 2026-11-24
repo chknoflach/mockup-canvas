@@ -70,21 +70,20 @@ describe('viewport math', () => {
     expect(topOnScreen).toBeGreaterThanOrEqual(76)
   })
 
-  it('computes fit vs fill-width/100% without ever clipping horizontally', () => {
-    // Wide desktop mockup in narrow sidebar: fit has margins, fill fills width edge-to-edge without horizontal clip
-    const wide = { x: 100, y: 100, width: 900, height: 600 }
-    const wideFit = computeFitMockup(wide, 800, 900)
-    const wideFill = computeFillMockup(wide, 800, 900)
-    expect(wideFill.scale).toBeGreaterThan(wideFit.scale)
-    expect(wideFill.tx + wide.x * wideFill.scale).toBeGreaterThanOrEqual(10)
-    expect(wideFill.tx + (wide.x + wide.width) * wideFill.scale).toBeLessThanOrEqual(790)
+  it('matches fit and fill-width when width is tightest, and toggles fit-height vs fill-width for tall portraits', () => {
+    // Width-constrained card (B.2 in a tall sidebar): fit and fill-width are identical
+    const shortCard = { x: 100, y: 100, width: 520, height: 454 }
+    const cardFit = computeFitMockup(shortCard, 800, 980)
+    const cardFill = computeFillMockup(shortCard, 800, 980)
+    expect(cardFit.scale).toBeCloseTo(cardFill.scale, 6)
+    expect(cardFit.tx + shortCard.x * cardFit.scale).toBeCloseTo(16, 4)
 
-    // Tall phone mockup: fit shows whole phone (<1x), fill snaps to crisp 100% top-aligned
+    // Tall portrait mockup: fit shows full height, fill-width fills width top-aligned
     const tallPhone = { x: 0, y: 0, width: 390, height: 1400 }
-    const phoneFit = computeFitMockup(tallPhone, 800, 900)
-    const phoneFill = computeFillMockup(tallPhone, 800, 900)
-    expect(phoneFit.scale).toBeLessThan(1)
-    expect(phoneFill.scale).toBe(1)
+    const phoneFit = computeFitMockup(tallPhone, 800, 980)
+    const phoneFill = computeFillMockup(tallPhone, 800, 980)
+    expect(phoneFit.scale).toBeLessThan(phoneFill.scale)
+    expect(phoneFit.ty + tallPhone.height * phoneFit.scale).toBeLessThanOrEqual(980 - 15)
     expect(phoneFill.ty).toBe(64)
   })
 })
