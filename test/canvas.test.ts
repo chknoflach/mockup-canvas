@@ -40,6 +40,7 @@ describe('mountMockupCanvas', () => {
     document.body.innerHTML = '<div id="root"></div>'
     window.history.replaceState(null, '', '/')
     window.sessionStorage.clear()
+    window.localStorage.clear()
   })
 
   it('defaults every mockup to static with unified header (ID, title, static/active toggle)', () => {
@@ -178,6 +179,73 @@ describe('mountMockupCanvas', () => {
     frame.dispatchEvent(activeWheel)
     expect(activeWheel.defaultPrevented).toBe(false)
     expect(handle.getViewport().tx).toBe(beforeActive.tx)
+
+    handle.destroy()
+  })
+
+  it('toggles note mode via button and "n" shortcut, places lettered notes, and marks changed mockups', () => {
+    const container = document.getElementById('root')!
+    const pagesWithChange: CanvasPage[] = [
+      {
+        ...PAGES[0]!,
+        groups: [
+          {
+            ...PAGES[0]!.groups[0]!,
+            items: [
+              PAGES[0]!.groups[0]!.items[0]!,
+              { ...PAGES[0]!.groups[0]!.items[1]!, changed: true },
+            ],
+          },
+        ],
+      },
+    ]
+
+    const handle = mountMockupCanvas(container, { pages: pagesWithChange, stateEndpoint: false })
+
+    // Changed mockup pill state on A.2, plain on A.1
+    const a1Id = container.querySelector<HTMLElement>('[data-mc-mockup-id="A.1"] .mc-mockup-id')!
+    const a2Id = container.querySelector<HTMLElement>('[data-mc-mockup-id="A.2"] .mc-mockup-id')!
+    expect(a1Id.dataset.mcChanged).toBeUndefined()
+    expect(a2Id.dataset.mcChanged).toBe('true')
+
+    // Dynamic changed marking
+    handle.setChangedMockups(['A.1'])
+    expect(a1Id.dataset.mcChanged).toBe('true')
+
+    // Toggle note mode with 'n' shortcut
+    expect(handle.isNoteMode()).toBe(false)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'n' }))
+    expect(handle.isNoteMode()).toBe(true)
+
+    // Clicking a mockup in note mode drops letter (A) and opens the floating input
+    const shield = container.querySelector<HTMLElement>('[data-mc-mockup-id="A.1"] .mc-static-shield')!
+    shield.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 120, clientY: 140, bubbles: true }))
+
+    const popover = container.querySelector<HTMLElement>('.mc-note-popover')!
+    expect(popover.hidden).toBe(false)
+    expect(container.querySelector('.mc-note-popover-letter')?.textContent).toBe('A')
+
+    const input = container.querySelector<HTMLTextAreaElement>('.mc-note-input')!
+    input.value = 'Tighten spacing here'
+    container.querySelector<HTMLButtonElement>('.mc-note-submit')!.click()
+
+    expect(popover.hidden).toBe(true)
+    const saved = handle.getNotes()
+    expect(saved).toHaveLength(1)
+    expect(saved[0]?.letter).toBe('A')
+    expect(saved[0]?.mockupId).toBe('A.1')
+    expect(saved[0]?.text).toBe('Tighten spacing here')
+    expect(saved[0]?.status).toBe('open')
+
+    // Second note gets letter (B) and allows empty optional note
+    shield.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 200, clientY: 180, bubbles: true }))
+    expect(container.querySelector('.mc-note-popover-letter')?.textContent).toBe('B')
+    container.querySelector<HTMLButtonElement>('.mc-note-submit')!.click()
+    expect(handle.getNotes().map((n) => n.letter)).toEqual(['A', 'B'])
+
+    // Escape exits note mode
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(handle.isNoteMode()).toBe(false)
 
     handle.destroy()
   })

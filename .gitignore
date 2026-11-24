@@ -1,4 +1,5 @@
 node_modules/
 dist/
 .logs/
+.mockup-canvas/
 .DS_Store

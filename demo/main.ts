@@ -18,7 +18,7 @@ if (stateParam) {
             title: 'Order summary',
             items: [
               { id: 'A.1', title: 'Default', width: 900, height: 560, src: '?state=order-default' },
-              { id: 'A.2', title: 'Mobile', width: 390, height: 640, src: '?state=order-mobile' },
+              { id: 'A.2', title: 'Mobile', width: 390, height: 640, src: '?state=order-mobile', changed: true },
             ],
           },
           {
@@ -37,7 +37,7 @@ if (stateParam) {
           {
             title: 'Enrollment flow',
             items: [
-              { id: 'C.1', title: 'Admin list', width: 860, height: 520, src: '?state=admin-list' },
+              { id: 'C.1', title: 'Admin list', width: 860, height: 520, src: '?state=admin-list', changed: true },
               { id: 'C.2', title: 'First login', width: 420, height: 460, src: '?state=first-login' },
             ],
           },

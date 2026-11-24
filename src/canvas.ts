@@ -1,9 +1,12 @@
 import { computePageLayout, type PageLayout } from './layout'
+import { createStateStore, inspectMockupElement, nextNoteLetter } from './notes'
 import type {
+  CanvasNote,
   CanvasPage,
   MockupCanvasConfig,
   MockupCanvasHandle,
   MockupMode,
+  NoteElementInfo,
   Viewport,
 } from './types'
 import {
@@ -30,11 +33,56 @@ const RECENTER_ICON_SVG = `<svg width="16" height="16" viewBox="0 0 16 16" fill=
   <circle cx="8" cy="8" r="1.5" />
 </svg>`
 
+const NOTE_ICON_SVG = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M3.5 2.5h9a1 1 0 0 1 1 1v7L10 13.5H3.5a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" />
+  <path d="M10 13.5V10h3.5" />
+  <path d="M5.5 6h5M5.5 8.5h3" />
+</svg>`
+
+const ENTER_ICON_SVG = `<svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M13 3.5v4a2 2 0 0 1-2 2H3.5" />
+  <path d="M6.5 6.5 3.5 9.5l3 3" />
+</svg>`
+
 const CHEVRON_ICON_SVG = `<svg class="mc-dropdown-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
   <path d="M3 4.5 6 7.5 9 4.5" />
 </svg>`
 
 const ANIMATION_MS = 220
+const DEFAULT_STATE_ENDPOINT = '/__mockup-canvas/state'
+const STATE_POLL_MS = 3000
+
+interface MockupDomEntry {
+  el: HTMLElement
+  idLink: HTMLAnchorElement
+  frame: HTMLElement
+  hoverOutline: HTMLElement
+  pinsLayer: HTMLElement
+  staticBtn: HTMLButtonElement
+  activeBtn: HTMLButtonElement
+  iframe?: HTMLIFrameElement
+  contentHost?: HTMLElement
+  configChanged: boolean
+  title: string
+}
+
+interface ActivePopover {
+  noteId: string | null
+  isNew: boolean
+  pageId: string
+  mockupId: string
+  mockupTitle: string
+  letter: string
+  x: number
+  y: number
+  element: NoteElementInfo
+}
+
+function summarizeTarget(mockupId: string, element: NoteElementInfo): string {
+  if (element.text) return `${mockupId} · ${element.tag} "${element.text}"`
+  if (element.ariaLabel) return `${mockupId} · ${element.tag} (${element.ariaLabel})`
+  return `${mockupId} · ${element.selector}`
+}
 
 export function mountMockupCanvas(
   container: HTMLElement,
@@ -42,6 +90,9 @@ export function mountMockupCanvas(
 ): MockupCanvasHandle {
   const { pages } = config
   const storageKey = config.storageKey ?? 'mockup-canvas:scale'
+  const stateEndpoint =
+    config.stateEndpoint === undefined ? DEFAULT_STATE_ENDPOINT : config.stateEndpoint
+  const store = createStateStore(stateEndpoint)
 
   const shell = document.createElement('div')
   shell.className = 'mc-shell'
@@ -130,16 +181,73 @@ export function mountMockupCanvas(
     root.appendChild(dropdown)
   }
 
-  // Top-right recenter icon control
+  // Top-right controls: Note mode toggle + Recenter
+  const controls = document.createElement('div')
+  controls.className = 'mc-controls'
+  controls.dataset.mcInteractive = 'true'
+
+  const noteModeBtn = document.createElement('button')
+  noteModeBtn.type = 'button'
+  noteModeBtn.className = 'mc-icon-btn mc-note-toggle'
+  noteModeBtn.setAttribute('aria-label', 'Note mode (N)')
+  noteModeBtn.setAttribute('aria-pressed', 'false')
+  noteModeBtn.title = 'Note mode (N)'
+  noteModeBtn.innerHTML = NOTE_ICON_SVG
+  noteModeBtn.addEventListener('click', () => setNoteMode(!noteMode))
+
   const recenterBtn = document.createElement('button')
   recenterBtn.type = 'button'
-  recenterBtn.className = 'mc-recenter'
+  recenterBtn.className = 'mc-icon-btn mc-recenter'
   recenterBtn.setAttribute('aria-label', 'Recenter')
   recenterBtn.title = 'Recenter'
-  recenterBtn.dataset.mcInteractive = 'true'
   recenterBtn.innerHTML = RECENTER_ICON_SVG
   recenterBtn.addEventListener('click', () => recenter(true))
-  root.appendChild(recenterBtn)
+
+  controls.append(noteModeBtn, recenterBtn)
+  root.appendChild(controls)
+
+  // Floating screen-space note input popover
+  const popoverEl = document.createElement('div')
+  popoverEl.className = 'mc-note-popover'
+  popoverEl.dataset.mcInteractive = 'true'
+  popoverEl.hidden = true
+
+  const popoverHead = document.createElement('div')
+  popoverHead.className = 'mc-note-popover-head'
+
+  const popoverRef = document.createElement('div')
+  popoverRef.className = 'mc-note-popover-ref'
+  const popoverLetter = document.createElement('span')
+  popoverLetter.className = 'mc-note-popover-letter'
+  const popoverTarget = document.createElement('span')
+  popoverTarget.className = 'mc-note-popover-target'
+  popoverRef.append(popoverLetter, popoverTarget)
+
+  const popoverDeleteBtn = document.createElement('button')
+  popoverDeleteBtn.type = 'button'
+  popoverDeleteBtn.className = 'mc-note-delete'
+  popoverDeleteBtn.textContent = 'Remove'
+
+  popoverHead.append(popoverRef, popoverDeleteBtn)
+
+  const popoverInputWrap = document.createElement('div')
+  popoverInputWrap.className = 'mc-note-input-wrap'
+
+  const popoverTextarea = document.createElement('textarea')
+  popoverTextarea.className = 'mc-note-input'
+  popoverTextarea.placeholder = 'Add a note (optional)…'
+  popoverTextarea.rows = 3
+
+  const popoverSubmitBtn = document.createElement('button')
+  popoverSubmitBtn.type = 'button'
+  popoverSubmitBtn.className = 'mc-note-submit'
+  popoverSubmitBtn.setAttribute('aria-label', 'Save note')
+  popoverSubmitBtn.title = 'Save note (Enter)'
+  popoverSubmitBtn.innerHTML = ENTER_ICON_SVG
+
+  popoverInputWrap.append(popoverTextarea, popoverSubmitBtn)
+  popoverEl.append(popoverHead, popoverInputWrap)
+  root.appendChild(popoverEl)
 
   shell.appendChild(root)
   container.replaceChildren(shell)
@@ -150,19 +258,15 @@ export function mountMockupCanvas(
   let viewport: Viewport = { tx: 0, ty: 0, scale: 1 }
   const pageViewports = new Map<string, Viewport>()
   const mockupModes = new Map<string, MockupMode>()
-  const mockupElements = new Map<
-    string,
-    {
-      el: HTMLElement
-      staticBtn: HTMLButtonElement
-      activeBtn: HTMLButtonElement
-      iframe?: HTMLIFrameElement
-      contentHost?: HTMLElement
-    }
-  >()
+  const mockupElements = new Map<string, MockupDomEntry>()
   let activeCleanups: Array<() => void> = []
   let animRaf: number | null = null
   let spaceHeld = false
+  let noteMode = false
+  let notes: CanvasNote[] = []
+  let dynamicChangedMockups = new Set<string>()
+  let activePopover: ActivePopover | null = null
+  let hoveredMockupId: string | null = null
   let dragState: { pointerId: number; lastX: number; lastY: number } | null = null
 
   function getSize(): { width: number; height: number } {
@@ -173,6 +277,33 @@ export function mountMockupCanvas(
     }
   }
 
+  function persistState(): void {
+    void store.save({
+      notes: [...notes],
+      changedMockups: Array.from(dynamicChangedMockups),
+    })
+  }
+
+  function positionPopover(): void {
+    if (!activePopover || !activeLayout) return
+    const pos = activeLayout.byId.get(activePopover.mockupId)
+    if (!pos) return
+    const { width, height } = getSize()
+    const pinScreenX = viewport.tx + (pos.frameRect.x + activePopover.x) * viewport.scale
+    const pinScreenY = viewport.ty + (pos.frameRect.y + activePopover.y) * viewport.scale
+
+    const popW = 280
+    const popH = 140
+    let left = pinScreenX + 18
+    if (left + popW > width - 16) {
+      left = Math.max(16, pinScreenX - popW - 18)
+    }
+    const top = Math.max(60, Math.min(height - popH - 16, pinScreenY - 20))
+
+    popoverEl.style.left = `${Math.round(left)}px`
+    popoverEl.style.top = `${Math.round(top)}px`
+  }
+
   function applyViewport(next: Viewport): void {
     viewport = { tx: next.tx, ty: next.ty, scale: clampScale(next.scale) }
     world.style.transform = `translate3d(${viewport.tx}px, ${viewport.ty}px, 0) scale(${viewport.scale})`
@@ -181,6 +312,9 @@ export function mountMockupCanvas(
       pageViewports.set(activePage.id, viewport)
     }
     writeStoredScale(viewport.scale, storageKey)
+    if (activePopover) {
+      positionPopover()
+    }
   }
 
   function cancelAnimation(): void {
@@ -235,6 +369,156 @@ export function mountMockupCanvas(
     }
   }
 
+  function clearHoverOutline(): void {
+    if (hoveredMockupId) {
+      const prev = mockupElements.get(hoveredMockupId)
+      if (prev) prev.hoverOutline.hidden = true
+      hoveredMockupId = null
+    }
+  }
+
+  function closePopover(): void {
+    activePopover = null
+    popoverEl.hidden = true
+    renderNotePins()
+  }
+
+  function openPopover(pop: ActivePopover, initialText: string): void {
+    activePopover = pop
+    popoverLetter.textContent = pop.letter
+    popoverTarget.textContent = summarizeTarget(pop.mockupId, pop.element)
+    popoverTarget.title = popoverTarget.textContent
+    popoverTextarea.value = initialText
+    popoverDeleteBtn.hidden = pop.isNew
+    popoverEl.hidden = false
+    renderNotePins()
+    positionPopover()
+    popoverTextarea.focus()
+  }
+
+  function submitPopover(): void {
+    if (!activePopover) return
+    const text = popoverTextarea.value.trim()
+    if (activePopover.isNew) {
+      const created: CanvasNote = {
+        id: `note-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        letter: activePopover.letter,
+        pageId: activePopover.pageId,
+        mockupId: activePopover.mockupId,
+        mockupTitle: activePopover.mockupTitle,
+        x: activePopover.x,
+        y: activePopover.y,
+        text,
+        element: activePopover.element,
+        status: 'open',
+        createdAt: new Date().toISOString(),
+      }
+      notes = [...notes, created]
+    } else if (activePopover.noteId) {
+      notes = notes.map((n) => (n.id === activePopover!.noteId ? { ...n, text } : n))
+    }
+    persistState()
+    closePopover()
+  }
+
+  function deleteActiveNote(): void {
+    if (!activePopover?.noteId) {
+      closePopover()
+      return
+    }
+    notes = notes.filter((n) => n.id !== activePopover!.noteId)
+    persistState()
+    closePopover()
+  }
+
+  popoverSubmitBtn.addEventListener('click', submitPopover)
+  popoverDeleteBtn.addEventListener('click', deleteActiveNote)
+  popoverTextarea.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      submitPopover()
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      closePopover()
+    }
+  })
+
+  function setNoteMode(enabled: boolean): void {
+    noteMode = enabled
+    root.dataset.mcNoteMode = enabled ? 'true' : 'false'
+    noteModeBtn.setAttribute('aria-pressed', String(enabled))
+    if (!enabled) {
+      clearHoverOutline()
+    }
+  }
+
+  function renderChangedStates(): void {
+    for (const [id, entry] of mockupElements) {
+      const changed = entry.configChanged || dynamicChangedMockups.has(id)
+      if (changed) {
+        entry.idLink.dataset.mcChanged = 'true'
+        entry.idLink.title = 'Changed in last turn'
+        entry.idLink.setAttribute('aria-label', `${id} (changed in last turn)`)
+      } else {
+        delete entry.idLink.dataset.mcChanged
+        entry.idLink.removeAttribute('title')
+        entry.idLink.removeAttribute('aria-label')
+      }
+    }
+  }
+
+  function renderNotePins(): void {
+    if (!activePage) return
+    const openOnPage = notes.filter((n) => n.pageId === activePage!.id && n.status === 'open')
+
+    for (const [mockupId, entry] of mockupElements) {
+      entry.pinsLayer.replaceChildren()
+      const mockupNotes = openOnPage.filter((n) => n.mockupId === mockupId)
+
+      for (const note of mockupNotes) {
+        const pin = document.createElement('button')
+        pin.type = 'button'
+        pin.className = 'mc-note-pin'
+        pin.dataset.mcInteractive = 'true'
+        pin.dataset.mcNoteId = note.id
+        pin.dataset.mcNoteLetter = note.letter
+        pin.textContent = note.letter
+        pin.title = note.text ? `${note.letter}: ${note.text}` : `${note.letter}: ${note.element.selector}`
+        pin.style.left = `${note.x}px`
+        pin.style.top = `${note.y}px`
+        pin.addEventListener('click', (e) => {
+          e.stopPropagation()
+          openPopover(
+            {
+              noteId: note.id,
+              isNew: false,
+              pageId: note.pageId,
+              mockupId: note.mockupId,
+              mockupTitle: note.mockupTitle,
+              letter: note.letter,
+              x: note.x,
+              y: note.y,
+              element: note.element,
+            },
+            note.text,
+          )
+        })
+        entry.pinsLayer.appendChild(pin)
+      }
+
+      // Show draft pin immediately while the user is typing a new note
+      if (activePopover?.isNew && activePopover.mockupId === mockupId) {
+        const draftPin = document.createElement('span')
+        draftPin.className = 'mc-note-pin'
+        draftPin.dataset.mcNoteDraft = 'true'
+        draftPin.textContent = activePopover.letter
+        draftPin.style.left = `${activePopover.x}px`
+        draftPin.style.top = `${activePopover.y}px`
+        entry.pinsLayer.appendChild(draftPin)
+      }
+    }
+  }
+
   function setMockupMode(mockupId: string, mode: MockupMode): void {
     mockupModes.set(mockupId, mode)
     const entry = mockupElements.get(mockupId)
@@ -255,6 +539,8 @@ export function mountMockupCanvas(
   }
 
   function teardownPage(): void {
+    clearHoverOutline()
+    closePopover()
     for (const cleanup of activeCleanups) {
       try {
         cleanup()
@@ -362,9 +648,10 @@ export function mountMockupCanvas(
         toggle.append(staticBtn, activeBtn)
         header.append(meta, toggle)
 
-        // Frame + static shield
+        // Frame + static shield + note overlays
         const frame = document.createElement('div')
         frame.className = 'mc-frame'
+        frame.dataset.mcFrameMockupId = item.id
         frame.style.width = `${item.width}px`
         frame.style.height = `${item.height}px`
 
@@ -396,14 +683,37 @@ export function mountMockupCanvas(
         shield.setAttribute('aria-hidden', 'true')
         frame.appendChild(shield)
 
+        const hoverOutline = document.createElement('div')
+        hoverOutline.className = 'mc-hover-outline'
+        hoverOutline.hidden = true
+        frame.appendChild(hoverOutline)
+
+        const pinsLayer = document.createElement('div')
+        pinsLayer.className = 'mc-note-pins'
+        frame.appendChild(pinsLayer)
+
         card.append(header, frame)
         fragment.appendChild(card)
 
-        mockupElements.set(item.id, { el: card, staticBtn, activeBtn, iframe, contentHost })
+        mockupElements.set(item.id, {
+          el: card,
+          idLink,
+          frame,
+          hoverOutline,
+          pinsLayer,
+          staticBtn,
+          activeBtn,
+          iframe,
+          contentHost,
+          configChanged: Boolean(item.changed),
+          title: item.title,
+        })
       }
     }
 
     world.appendChild(fragment)
+    renderChangedStates()
+    renderNotePins()
     return layout
   }
 
@@ -452,11 +762,20 @@ export function mountMockupCanvas(
     syncUrl(resolved.page.id, null)
   }
 
-  // Pointer pan handling
+  function findMockupEntryFromTarget(target: EventTarget | null): [string, MockupDomEntry] | null {
+    if (!(target instanceof Element)) return null
+    const frame = target.closest<HTMLElement>('[data-mc-frame-mockup-id]')
+    const mockupId = frame?.dataset.mcFrameMockupId
+    if (!mockupId) return null
+    const entry = mockupElements.get(mockupId)
+    return entry ? [mockupId, entry] : null
+  }
+
+  // Pointer handling (pan in normal mode; element highlight + click-to-note in note mode)
   function isInteractiveTarget(target: EventTarget | null): boolean {
     if (!(target instanceof Element)) return false
     if (target.closest('[data-mc-interactive="true"]')) return true
-    if (!spaceHeld) {
+    if (!spaceHeld && !noteMode) {
       const activeFrame = target.closest('.mc-mockup[data-mc-mode="active"] .mc-frame')
       if (activeFrame) return true
     }
@@ -466,6 +785,51 @@ export function mountMockupCanvas(
   const onPointerDown = (e: PointerEvent) => {
     if (e.button !== 0 && e.button !== 1) return
     if (e.button === 0 && isInteractiveTarget(e.target)) return
+
+    // In note mode, left-click on a mockup places a note pin instead of dragging the canvas
+    if (noteMode && e.button === 0 && !spaceHeld && activePage) {
+      const hit = findMockupEntryFromTarget(e.target)
+      if (hit) {
+        e.stopPropagation()
+        const [mockupId, entry] = hit
+        const inspected = inspectMockupElement({
+          frameEl: entry.frame,
+          iframe: entry.iframe,
+          contentHost: entry.contentHost,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          scale: viewport.scale,
+        })
+        const frameRect = entry.frame.getBoundingClientRect()
+        const localX = inspected?.localX ?? Math.round((e.clientX - frameRect.left) / viewport.scale)
+        const localY = inspected?.localY ?? Math.round((e.clientY - frameRect.top) / viewport.scale)
+        const element: NoteElementInfo = inspected?.element ?? {
+          tag: 'frame',
+          selector: `[data-mc-mockup-id="${mockupId}"]`,
+          rect: { x: Math.max(0, localX - 16), y: Math.max(0, localY - 16), width: 32, height: 32 },
+        }
+
+        const openOnPage = notes.filter((n) => n.pageId === activePage!.id && n.status === 'open')
+        const letter = nextNoteLetter(openOnPage)
+        clearHoverOutline()
+        openPopover(
+          {
+            noteId: null,
+            isNew: true,
+            pageId: activePage.id,
+            mockupId,
+            mockupTitle: entry.title,
+            letter,
+            x: localX,
+            y: localY,
+            element,
+          },
+          '',
+        )
+        return
+      }
+    }
+
     cancelAnimation()
     dragState = { pointerId: e.pointerId, lastX: e.clientX, lastY: e.clientY }
     root.dataset.mcDragging = 'true'
@@ -479,12 +843,51 @@ export function mountMockupCanvas(
   }
 
   const onPointerMove = (e: PointerEvent) => {
-    if (!dragState || e.pointerId !== dragState.pointerId) return
-    const dx = e.clientX - dragState.lastX
-    const dy = e.clientY - dragState.lastY
-    dragState.lastX = e.clientX
-    dragState.lastY = e.clientY
-    applyViewport(panBy(viewport, dx, dy))
+    if (dragState && e.pointerId === dragState.pointerId) {
+      const dx = e.clientX - dragState.lastX
+      const dy = e.clientY - dragState.lastY
+      dragState.lastX = e.clientX
+      dragState.lastY = e.clientY
+      applyViewport(panBy(viewport, dx, dy))
+      return
+    }
+
+    if (!noteMode || spaceHeld || !popoverEl.hidden) {
+      clearHoverOutline()
+      return
+    }
+
+    const hit = findMockupEntryFromTarget(e.target)
+    if (!hit) {
+      clearHoverOutline()
+      return
+    }
+
+    const [mockupId, entry] = hit
+    const inspected = inspectMockupElement({
+      frameEl: entry.frame,
+      iframe: entry.iframe,
+      contentHost: entry.contentHost,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      scale: viewport.scale,
+    })
+
+    if (!inspected) {
+      clearHoverOutline()
+      return
+    }
+
+    if (hoveredMockupId && hoveredMockupId !== mockupId) {
+      clearHoverOutline()
+    }
+    hoveredMockupId = mockupId
+    const { rect } = inspected.element
+    entry.hoverOutline.style.left = `${rect.x}px`
+    entry.hoverOutline.style.top = `${rect.y}px`
+    entry.hoverOutline.style.width = `${rect.width}px`
+    entry.hoverOutline.style.height = `${rect.height}px`
+    entry.hoverOutline.hidden = false
   }
 
   const endDrag = (e: PointerEvent) => {
@@ -502,12 +905,10 @@ export function mountMockupCanvas(
 
   // Trackpad pan (two-finger scroll) + pinch/Cmd/Ctrl zoom toward cursor
   const onWheel = (e: WheelEvent) => {
-    // Let interactive overlays (such as the responsive page dropdown menu) scroll natively.
     if (e.target instanceof Element && e.target.closest('[data-mc-interactive="true"]')) {
       return
     }
-    // Allow normal inner scrolling only when hovering an active mockup frame without zoom modifier.
-    if (!e.ctrlKey && !e.metaKey && e.target instanceof Element) {
+    if (!noteMode && !e.ctrlKey && !e.metaKey && e.target instanceof Element) {
       const activeFrame = e.target.closest('.mc-mockup[data-mc-mode="active"] .mc-frame')
       if (activeFrame) return
     }
@@ -531,23 +932,40 @@ export function mountMockupCanvas(
     }
   }
 
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !dropdownMenu.hidden) {
-      setDropdownOpen(false)
-      return
-    }
-    if (e.code === 'Space' && !e.repeat) {
-      const tag = (e.target as HTMLElement | null)?.tagName
-      if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
-        spaceHeld = true
-        root.dataset.mcSpace = 'true'
-      }
-    }
+  const isTypingTarget = (target: EventTarget | null): boolean => {
+    if (!(target instanceof HTMLElement)) return false
+    const tag = target.tagName
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable
   }
 
-  const onDocumentPointerDown = (e: PointerEvent) => {
-    if (!dropdownMenu.hidden && e.target instanceof Node && !dropdown.contains(e.target)) {
-      setDropdownOpen(false)
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      if (!popoverEl.hidden) {
+        closePopover()
+        return
+      }
+      if (!dropdownMenu.hidden) {
+        setDropdownOpen(false)
+        return
+      }
+      if (noteMode) {
+        setNoteMode(false)
+        return
+      }
+    }
+
+    if (isTypingTarget(e.target)) return
+
+    if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat) {
+      e.preventDefault()
+      setNoteMode(!noteMode)
+      return
+    }
+
+    if (e.code === 'Space' && !e.repeat) {
+      spaceHeld = true
+      root.dataset.mcSpace = 'true'
+      clearHoverOutline()
     }
   }
 
@@ -555,6 +973,20 @@ export function mountMockupCanvas(
     if (e.code === 'Space') {
       spaceHeld = false
       delete root.dataset.mcSpace
+    }
+  }
+
+  const onDocumentPointerDown = (e: PointerEvent) => {
+    if (!dropdownMenu.hidden && e.target instanceof Node && !dropdown.contains(e.target)) {
+      setDropdownOpen(false)
+    }
+    if (
+      !popoverEl.hidden &&
+      e.target instanceof Node &&
+      !popoverEl.contains(e.target) &&
+      !(e.target instanceof Element && e.target.closest('.mc-note-pin'))
+    ) {
+      closePopover()
     }
   }
 
@@ -586,10 +1018,37 @@ export function mountMockupCanvas(
     }
   }
 
+  // Sync persisted notes + changedMockups from disk/localStorage so agent updates appear live
+  async function syncPersistedState(): Promise<void> {
+    if (activePopover) return
+    const loaded = await store.load()
+    const prevKey = JSON.stringify({ notes, changed: Array.from(dynamicChangedMockups) })
+    const nextKey = JSON.stringify({ notes: loaded.notes, changed: loaded.changedMockups })
+    if (prevKey === nextKey) return
+    notes = loaded.notes
+    dynamicChangedMockups = new Set(loaded.changedMockups)
+    renderChangedStates()
+    renderNotePins()
+  }
+
+  const onWindowFocus = () => {
+    void syncPersistedState()
+  }
+
+  const pollInterval =
+    stateEndpoint && typeof window !== 'undefined'
+      ? window.setInterval(() => {
+          if (document.visibilityState === 'visible') {
+            void syncPersistedState()
+          }
+        }, STATE_POLL_MS)
+      : null
+
   root.addEventListener('pointerdown', onPointerDown)
   root.addEventListener('pointermove', onPointerMove)
   root.addEventListener('pointerup', endDrag)
   root.addEventListener('pointercancel', endDrag)
+  root.addEventListener('pointerleave', clearHoverOutline)
   root.addEventListener('wheel', onWheel, { passive: false })
   root.addEventListener('gesturestart', onGestureStart, { passive: false })
   root.addEventListener('gesturechange', onGestureChange, { passive: false })
@@ -597,6 +1056,7 @@ export function mountMockupCanvas(
   window.addEventListener('keyup', onKeyUp)
   window.addEventListener('popstate', onUrlChange)
   window.addEventListener('hashchange', onUrlChange)
+  window.addEventListener('focus', onWindowFocus)
   document.addEventListener('pointerdown', onDocumentPointerDown)
 
   // Initial mount from URL (or default page fit)
@@ -621,19 +1081,33 @@ export function mountMockupCanvas(
     }
   }
 
+  void syncPersistedState()
+
   return {
     goTo,
     recenter,
     setMockupMode,
+    setNoteMode,
+    isNoteMode: () => noteMode,
+    setChangedMockups(mockupIds: string[]) {
+      dynamicChangedMockups = new Set(mockupIds)
+      renderChangedStates()
+      persistState()
+    },
+    getNotes: () => [...notes],
     getViewport: () => ({ ...viewport }),
     getActivePageId: () => activePage?.id ?? null,
     destroy() {
       cancelAnimation()
       teardownPage()
+      if (pollInterval !== null) {
+        window.clearInterval(pollInterval)
+      }
       root.removeEventListener('pointerdown', onPointerDown)
       root.removeEventListener('pointermove', onPointerMove)
       root.removeEventListener('pointerup', endDrag)
       root.removeEventListener('pointercancel', endDrag)
+      root.removeEventListener('pointerleave', clearHoverOutline)
       root.removeEventListener('wheel', onWheel)
       root.removeEventListener('gesturestart', onGestureStart)
       root.removeEventListener('gesturechange', onGestureChange)
@@ -641,6 +1115,7 @@ export function mountMockupCanvas(
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('popstate', onUrlChange)
       window.removeEventListener('hashchange', onUrlChange)
+      window.removeEventListener('focus', onWindowFocus)
       document.removeEventListener('pointerdown', onDocumentPointerDown)
       shell.remove()
     },
