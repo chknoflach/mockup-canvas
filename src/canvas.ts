@@ -162,30 +162,40 @@ export function mountMockupCanvas(
     setDropdownOpen(dropdownMenu.hidden)
   })
 
-  const pageButtons = new Map<string, HTMLButtonElement[]>()
+  const pageButtons = new Map<string, Array<{ btn: HTMLButtonElement; dot: HTMLSpanElement }>>()
   for (const page of pages) {
     const createPageButton = (source: 'sidebar' | 'dropdown') => {
       const btn = document.createElement('button')
       btn.type = 'button'
       btn.className = 'mc-page-item'
-      btn.textContent = page.title
       btn.dataset.mcPageId = page.id
       btn.dataset.mcPageSource = source
       if (source === 'dropdown') {
         btn.setAttribute('role', 'option')
       }
+
+      const label = document.createElement('span')
+      label.className = 'mc-page-item-label'
+      label.textContent = page.title
+
+      const dot = document.createElement('span')
+      dot.className = 'mc-page-changed-dot'
+      dot.setAttribute('aria-hidden', 'true')
+      dot.hidden = true
+
+      btn.append(label, dot)
       btn.addEventListener('click', () => {
         setDropdownOpen(false)
         goTo({ pageId: page.id, animate: false })
       })
-      return btn
+      return { btn, dot }
     }
 
-    const sideBtn = createPageButton('sidebar')
-    const dropBtn = createPageButton('dropdown')
-    sidebarList.appendChild(sideBtn)
-    dropdownMenu.appendChild(dropBtn)
-    pageButtons.set(page.id, [sideBtn, dropBtn])
+    const sideItem = createPageButton('sidebar')
+    const dropItem = createPageButton('dropdown')
+    sidebarList.appendChild(sideItem.btn)
+    dropdownMenu.appendChild(dropItem.btn)
+    pageButtons.set(page.id, [sideItem, dropItem])
   }
 
   if (pages.length > 0) {
@@ -518,19 +528,24 @@ export function mountMockupCanvas(
     mockupTitle: string
   }
 
+  function pageHasChanges(page: CanvasPage): boolean {
+    return page.groups.some((group) =>
+      group.items.some((item) => Boolean(item.changed) || dynamicChangedMockups.has(item.id)),
+    )
+  }
+
   function getChangedScreens(): ChangedScreenEntry[] {
+    if (!activePage) return []
     const out: ChangedScreenEntry[] = []
-    for (const page of pages) {
-      for (const group of page.groups) {
-        for (const item of group.items) {
-          if (item.changed || dynamicChangedMockups.has(item.id)) {
-            out.push({
-              pageId: page.id,
-              pageTitle: page.title,
-              mockupId: item.id,
-              mockupTitle: item.title,
-            })
-          }
+    for (const group of activePage.groups) {
+      for (const item of group.items) {
+        if (item.changed || dynamicChangedMockups.has(item.id)) {
+          out.push({
+            pageId: activePage.id,
+            pageTitle: activePage.title,
+            mockupId: item.id,
+            mockupTitle: item.title,
+          })
         }
       }
     }
@@ -596,7 +611,19 @@ export function mountMockupCanvas(
     }
   }
 
+  function renderPageChangeDots(): void {
+    for (const page of pages) {
+      const hasChanges = pageHasChanges(page)
+      const entries = pageButtons.get(page.id)
+      if (!entries) continue
+      for (const { dot } of entries) {
+        dot.hidden = !hasChanges
+      }
+    }
+  }
+
   function renderChangedControls(): void {
+    renderPageChangeDots()
     const list = getChangedScreens()
     if (list.length === 0) {
       changedGroup.hidden = true
@@ -606,7 +633,6 @@ export function mountMockupCanvas(
     }
 
     changedGroup.hidden = false
-    const showPageLabel = pages.length > 1
     changedMenu.replaceChildren()
 
     list.forEach((entry, idx) => {
@@ -638,13 +664,6 @@ export function mountMockupCanvas(
 
       main.append(idPill, title)
       row.appendChild(main)
-
-      if (showPageLabel) {
-        const pageTag = document.createElement('span')
-        pageTag.className = 'mc-changed-row-page'
-        pageTag.textContent = entry.pageTitle
-        row.appendChild(pageTag)
-      }
 
       row.addEventListener('pointerenter', () => {
         highlightedChangedIndex = idx
@@ -829,8 +848,8 @@ export function mountMockupCanvas(
     activeLayout = layout
 
     dropdownLabel.textContent = page.title
-    for (const [id, buttons] of pageButtons) {
-      for (const btn of buttons) {
+    for (const [id, entries] of pageButtons) {
+      for (const { btn } of entries) {
         if (id === page.id) {
           btn.setAttribute('aria-current', 'page')
           if (btn.getAttribute('role') === 'option') {
@@ -1015,6 +1034,8 @@ export function mountMockupCanvas(
     const pageChanged = activePage?.id !== resolved.page.id
     if (pageChanged) {
       focusedMockupId = null
+      focusedChangedId = null
+      setChangedMenuOpen(false)
       renderPage(resolved.page)
     }
 

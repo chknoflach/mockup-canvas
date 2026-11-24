@@ -114,10 +114,30 @@
   width: 100%;
   padding: 7px 10px;
   border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.mc-page-item-label {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  cursor: pointer;
+  min-width: 0;
+}
+
+.mc-page-changed-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--mc-changed-bg);
+  flex-shrink: 0;
+}
+
+.mc-page-changed-dot[hidden] {
+  display: none;
 }
 
 .mc-page-item:hover {

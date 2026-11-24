@@ -259,7 +259,7 @@ describe('mountMockupCanvas', () => {
     handle.destroy()
   })
 
-  it('uses arrow keys for spatial mockup navigation by default and switches to changes mode via "c" or toggle', () => {
+  it('uses arrow keys for spatial mockup navigation by default and scopes changes mode to the active page', () => {
     const container = document.getElementById('root')!
     const pagesWithChanges: CanvasPage[] = [
       {
@@ -272,7 +272,10 @@ describe('mountMockupCanvas', () => {
               { ...PAGES[0]!.groups[0]!.items[1]!, changed: true },
             ],
           },
-          PAGES[0]!.groups[1]!,
+          {
+            ...PAGES[0]!.groups[1]!,
+            items: [{ ...PAGES[0]!.groups[1]!.items[0]!, changed: true }],
+          },
         ],
       },
       {
@@ -280,7 +283,7 @@ describe('mountMockupCanvas', () => {
         groups: [
           {
             ...PAGES[1]!.groups[0]!,
-            items: [{ ...PAGES[1]!.groups[0]!.items[0]!, changed: true }],
+            items: [PAGES[1]!.groups[0]!.items[0]!],
           },
         ],
       },
@@ -293,6 +296,16 @@ describe('mountMockupCanvas', () => {
     expect(handle.isChangesMode()).toBe(false)
     // Middle segment shows only the dot (no count text)
     expect(container.querySelector('.mc-changed-list-btn')?.textContent?.trim()).toBe('')
+
+    // Page selector shows changed dot on checkout (has changes) and hides it on passkeys (no changes)
+    const checkoutDot = container.querySelector<HTMLElement>(
+      '[data-mc-page-source="sidebar"][data-mc-page-id="checkout"] .mc-page-changed-dot',
+    )!
+    const passkeysDot = container.querySelector<HTMLElement>(
+      '[data-mc-page-source="sidebar"][data-mc-page-id="passkeys"] .mc-page-changed-dot',
+    )!
+    expect(checkoutDot.hidden).toBe(false)
+    expect(passkeysDot.hidden).toBe(true)
 
     // Zoom to a custom scale first so we prove navigation pans ONLY without changing zoom
     const rootEl = container.querySelector('.mc-root')!
@@ -333,7 +346,7 @@ describe('mountMockupCanvas', () => {
     const tinyScale = handle.getViewport().scale
     expect(tinyScale).toBeLessThan(0.5)
 
-    // In Changes mode: Right/Left step across changed screens with wrap-around AND zoom to fit
+    // In Changes mode: steps ONLY across active page's changed screens (A.2 <-> B.1) with wrap-around
     vi.useFakeTimers()
     try {
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
@@ -344,8 +357,8 @@ describe('mountMockupCanvas', () => {
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
       vi.advanceTimersByTime(300)
-      expect(handle.getActivePageId()).toBe('passkeys')
-      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('C.1')
+      expect(handle.getActivePageId()).toBe('checkout')
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('B.1')
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
       vi.advanceTimersByTime(300)
@@ -354,19 +367,19 @@ describe('mountMockupCanvas', () => {
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
       vi.advanceTimersByTime(300)
-      expect(handle.getActivePageId()).toBe('passkeys')
-      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('C.1')
+      expect(handle.getActivePageId()).toBe('checkout')
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('B.1')
 
-      // Down arrow opens the changed list; Up/Down navigate with wrap-around WITHOUT panning; Enter confirms & zooms to fit
+      // Down arrow opens the active page's changed list; Up/Down navigate with wrap-around WITHOUT panning
       const menu = container.querySelector<HTMLElement>('.mc-changed-menu')!
       const beforeMenu = handle.getViewport()
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
       expect(menu.hidden).toBe(false)
-      expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('C.1')
+      expect(menu.querySelectorAll('.mc-changed-row').length).toBe(2)
+      expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('B.1')
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
       expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('A.2')
-      expect(handle.getActivePageId()).toBe('passkeys')
       expect(handle.getViewport()).toEqual(beforeMenu)
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
@@ -375,8 +388,9 @@ describe('mountMockupCanvas', () => {
       expect(handle.getActivePageId()).toBe('checkout')
       expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
 
-      // Escape exits changes mode when menu is closed
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      // Switching to a page with no changes hides the changes control and exits changes mode
+      handle.goTo({ pageId: 'passkeys', animate: false })
+      expect(changedGroup.hidden).toBe(true)
       expect(handle.isChangesMode()).toBe(false)
     } finally {
       vi.useRealTimers()
