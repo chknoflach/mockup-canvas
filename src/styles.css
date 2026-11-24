@@ -385,12 +385,13 @@
   cursor: pointer;
 }
 
-.mc-changed-row:hover {
+.mc-changed-row:hover,
+.mc-changed-row[data-mc-highlighted='true'] {
   background: var(--mc-surface-muted);
 }
 
-.mc-changed-row[aria-current='true'] {
-  background: var(--mc-surface-muted);
+.mc-changed-row[aria-current='true'] .mc-changed-row-title {
+  font-weight: 600;
 }
 
 .mc-changed-row-main {

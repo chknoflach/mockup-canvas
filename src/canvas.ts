@@ -300,6 +300,7 @@ export function mountMockupCanvas(
   let notes: CanvasNote[] = []
   let dynamicChangedMockups = new Set<string>()
   let focusedChangedId: string | null = null
+  let highlightedChangedIndex = 0
   let activePopover: ActivePopover | null = null
   let hoveredMockupId: string | null = null
   let dragState: { pointerId: number; lastX: number; lastY: number } | null = null
@@ -518,9 +519,53 @@ export function mountMockupCanvas(
     return out
   }
 
+  function syncChangedHighlight(): void {
+    const rows = Array.from(changedMenu.querySelectorAll<HTMLButtonElement>('.mc-changed-row'))
+    rows.forEach((row, idx) => {
+      if (idx === highlightedChangedIndex) {
+        row.dataset.mcHighlighted = 'true'
+        if (typeof row.scrollIntoView === 'function') {
+          row.scrollIntoView({ block: 'nearest' })
+        }
+      } else {
+        delete row.dataset.mcHighlighted
+      }
+    })
+  }
+
   function setChangedMenuOpen(open: boolean): void {
+    const list = getChangedScreens()
+    if (open && list.length > 0) {
+      const activeIdx = focusedChangedId
+        ? list.findIndex((entry) => entry.mockupId === focusedChangedId)
+        : -1
+      highlightedChangedIndex = activeIdx >= 0 ? activeIdx : 0
+    }
     changedMenu.hidden = !open
     listChangedBtn.setAttribute('aria-expanded', String(open))
+    if (open) {
+      syncChangedHighlight()
+    }
+  }
+
+  function moveChangedHighlight(delta: -1 | 1): void {
+    const list = getChangedScreens()
+    if (list.length === 0) return
+    highlightedChangedIndex = (highlightedChangedIndex + delta + list.length) % list.length
+    syncChangedHighlight()
+  }
+
+  function confirmChangedHighlight(): void {
+    const list = getChangedScreens()
+    const target = list[highlightedChangedIndex]
+    if (!target) {
+      setChangedMenuOpen(false)
+      return
+    }
+    setChangedMenuOpen(false)
+    focusedChangedId = target.mockupId
+    goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true })
+    renderChangedControls()
   }
 
   function renderChangedControls(): void {
@@ -542,7 +587,7 @@ export function mountMockupCanvas(
     const showPageLabel = pages.length > 1
     changedMenu.replaceChildren()
 
-    for (const entry of list) {
+    list.forEach((entry, idx) => {
       const row = document.createElement('button')
       row.type = 'button'
       row.className = 'mc-changed-row'
@@ -553,6 +598,9 @@ export function mountMockupCanvas(
         row.setAttribute('aria-selected', 'true')
       } else {
         row.setAttribute('aria-selected', 'false')
+      }
+      if (!changedMenu.hidden && idx === highlightedChangedIndex) {
+        row.dataset.mcHighlighted = 'true'
       }
 
       const main = document.createElement('span')
@@ -576,14 +624,17 @@ export function mountMockupCanvas(
         row.appendChild(pageTag)
       }
 
+      row.addEventListener('pointerenter', () => {
+        highlightedChangedIndex = idx
+        syncChangedHighlight()
+      })
+
       row.addEventListener('click', () => {
-        setChangedMenuOpen(false)
-        focusedChangedId = entry.mockupId
-        goTo({ pageId: entry.pageId, mockupId: entry.mockupId, animate: true })
-        renderChangedControls()
+        highlightedChangedIndex = idx
+        confirmChangedHighlight()
       })
       changedMenu.appendChild(row)
-    }
+    })
   }
 
   function stepChanged(delta: -1 | 1): void {
@@ -1125,6 +1176,24 @@ export function mountMockupCanvas(
     if (isTypingTarget(e.target)) return
 
     if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (!changedMenu.hidden) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          moveChangedHighlight(1)
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          moveChangedHighlight(-1)
+          return
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          confirmChangedHighlight()
+          return
+        }
+      }
+
       if (e.key === 'ArrowLeft' && !changedGroup.hidden) {
         e.preventDefault()
         stepChanged(-1)
@@ -1137,7 +1206,7 @@ export function mountMockupCanvas(
       }
       if (e.key === 'ArrowDown' && !changedGroup.hidden) {
         e.preventDefault()
-        setChangedMenuOpen(changedMenu.hidden)
+        setChangedMenuOpen(true)
         return
       }
       if ((e.key === 'n' || e.key === 'N') && !e.repeat) {

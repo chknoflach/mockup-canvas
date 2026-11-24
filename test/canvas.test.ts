@@ -317,15 +317,51 @@ describe('mountMockupCanvas', () => {
     expect(container.querySelector('.mc-changed-count')?.textContent).toBe('1/2')
     expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
 
-    // Down arrow opens the changed list; Escape closes it
+    // Left arrow wraps from first (1/2) to last (2/2) and Right wraps from last (2/2) back to first (1/2)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+    expect(handle.getActivePageId()).toBe('passkeys')
+    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('2/2')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    expect(handle.getActivePageId()).toBe('checkout')
+    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('1/2')
+    expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
+
+    // Down arrow opens the changed list; Up/Down navigate with wrap-around WITHOUT panning; Enter confirms and pans
     const menu = container.querySelector<HTMLElement>('.mc-changed-menu')!
     expect(menu.hidden).toBe(true)
+    const beforeMenu = handle.getViewport()
+
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
     expect(menu.hidden).toBe(false)
     expect(menu.querySelectorAll('.mc-changed-row').length).toBe(2)
+    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('A.2')
 
+    // ArrowUp wraps from first (A.2) to last (C.1) without changing page or viewport
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }))
+    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('C.1')
+    expect(handle.getActivePageId()).toBe('checkout')
+    expect(handle.getViewport()).toEqual(beforeMenu)
+
+    // ArrowDown wraps from last (C.1) back to first (A.2), then ArrowDown moves to C.1
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('A.2')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('C.1')
+
+    // Escape closes without panning
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(menu.hidden).toBe(true)
+    expect(handle.getActivePageId()).toBe('checkout')
+
+    // Re-open, move to C.1, confirm with Enter -> switches page & pans ONLY (scale preserved)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    expect(menu.hidden).toBe(true)
+    expect(handle.getActivePageId()).toBe('passkeys')
+    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('2/2')
+    expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
 
     handle.destroy()
   })
