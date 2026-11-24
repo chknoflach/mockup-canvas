@@ -10,6 +10,8 @@ export { describeElementSelector, indexToLetter, inspectMockupElement, nextNoteL
 export { buildDeepLink, parseDeepLink, resolveTarget } from './url'
 export {
   clampScale,
+  computeFillMockup,
+  computeFitMockup,
   computeFitViewport,
   computePanToTarget,
   panBy,

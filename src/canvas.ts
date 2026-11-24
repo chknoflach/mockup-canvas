@@ -23,6 +23,8 @@ import {
 } from './url'
 import {
   clampScale,
+  computeFillMockup,
+  computeFitMockup,
   computeFitViewport,
   computePanToTarget,
   interpolateViewport,
@@ -322,6 +324,8 @@ export function mountMockupCanvas(
   let activeCleanups: Array<() => void> = []
   let animRaf: number | null = null
   let spaceHeld = false
+  let shiftTapCandidate = false
+  let shiftDownAt = 0
   let noteMode = false
   let changesMode = false
   let notes: CanvasNote[] = []
@@ -698,6 +702,56 @@ export function mountMockupCanvas(
     focusedChangedId = target.mockupId
     goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true, fit: true })
     renderChangedControls()
+  }
+
+  function resolveCurrentMockupId(): string | null {
+    if (!activeLayout) return null
+    if (focusedMockupId && activeLayout.byId.has(focusedMockupId)) return focusedMockupId
+    const { width, height } = getSize()
+    const worldCenterX = (width / 2 - viewport.tx) / viewport.scale
+    const worldCenterY = (height / 2 - viewport.ty) / viewport.scale
+    let bestId: string | null = null
+    let bestDist = Number.POSITIVE_INFINITY
+    for (const pos of activeLayout.byId.values()) {
+      const r = pos.rect
+      if (
+        worldCenterX >= r.x &&
+        worldCenterX <= r.x + r.width &&
+        worldCenterY >= r.y &&
+        worldCenterY <= r.y + r.height
+      ) {
+        return pos.item.id
+      }
+      const cx = r.x + r.width / 2
+      const cy = r.y + r.height / 2
+      const dist = Math.hypot(cx - worldCenterX, cy - worldCenterY)
+      if (dist < bestDist) {
+        bestDist = dist
+        bestId = pos.item.id
+      }
+    }
+    return bestId
+  }
+
+  function toggleShiftFitFill(): void {
+    if (!activePage || !activeLayout) return
+    const targetId = resolveCurrentMockupId()
+    if (!targetId) return
+    const pos = activeLayout.byId.get(targetId)
+    if (!pos) return
+
+    focusedMockupId = targetId
+    const { width, height } = getSize()
+    const fit = computeFitMockup(pos.rect, width, height)
+    const fill = computeFillMockup(pos.rect, width, height)
+
+    const atFit =
+      Math.abs(viewport.scale - fit.scale) < 0.04 &&
+      Math.abs(viewport.tx - fit.tx) < 24 &&
+      Math.abs(viewport.ty - fit.ty) < 24
+
+    animateTo(atFit ? fill : fit, true)
+    syncUrl(activePage.id, targetId)
   }
 
   function navigateSpatial(direction: SpatialDirection): void {
@@ -1084,6 +1138,7 @@ export function mountMockupCanvas(
   }
 
   const onPointerDown = (e: PointerEvent) => {
+    shiftTapCandidate = false
     if (e.button !== 0 && e.button !== 1) return
     if (e.button === 0 && isInteractiveTarget(e.target)) return
 
@@ -1241,6 +1296,15 @@ export function mountMockupCanvas(
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Shift') {
+      if (!e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey && !isTypingTarget(e.target)) {
+        shiftTapCandidate = true
+        shiftDownAt = performance.now()
+      }
+      return
+    }
+    shiftTapCandidate = false
+
     if (e.key === 'Escape') {
       if (!popoverEl.hidden) {
         closePopover()
@@ -1356,6 +1420,17 @@ export function mountMockupCanvas(
   }
 
   const onKeyUp = (e: KeyboardEvent) => {
+    if (e.key === 'Shift') {
+      if (
+        shiftTapCandidate &&
+        !isTypingTarget(e.target) &&
+        performance.now() - shiftDownAt < 400
+      ) {
+        toggleShiftFitFill()
+      }
+      shiftTapCandidate = false
+      return
+    }
     if (e.code === 'Space') {
       spaceHeld = false
       delete root.dataset.mcSpace

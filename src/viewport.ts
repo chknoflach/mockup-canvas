@@ -61,6 +61,62 @@ export function computeFitViewport(
   return { tx, ty, scale }
 }
 
+/** Zoom and center a single mockup so its entire box fits inside the viewport (contain). */
+export function computeFitMockup(
+  target: Rect,
+  viewportWidth: number,
+  viewportHeight: number,
+  padding = 48,
+): Viewport {
+  if (target.width <= 0 || target.height <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
+    return { tx: padding, ty: TOP_CHROME_CLEARANCE, scale: 1 }
+  }
+  const topPad = Math.max(padding, TOP_CHROME_CLEARANCE)
+  const availW = Math.max(1, viewportWidth - padding * 2)
+  const availH = Math.max(1, viewportHeight - topPad - padding)
+
+  const scale = clampScale(Math.min(availW / target.width, availH / target.height))
+  const scaledW = target.width * scale
+  const scaledH = target.height * scale
+
+  return {
+    scale,
+    tx: (viewportWidth - scaledW) / 2 - target.x * scale,
+    ty: topPad + (availH - scaledH) / 2 - target.y * scale,
+  }
+}
+
+/** Zoom a single mockup to fill the viewport along the looser axis (cover), keeping the header visible. */
+export function computeFillMockup(
+  target: Rect,
+  viewportWidth: number,
+  viewportHeight: number,
+  padding = 24,
+): Viewport {
+  if (target.width <= 0 || target.height <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
+    return { tx: padding, ty: TOP_CHROME_CLEARANCE, scale: 1 }
+  }
+  const topPad = Math.max(padding, TOP_CHROME_CLEARANCE)
+  const availW = Math.max(1, viewportWidth - padding * 2)
+  const availH = Math.max(1, viewportHeight - topPad - padding)
+
+  const fitScale = clampScale(Math.min(availW / target.width, availH / target.height))
+  let scale = clampScale(Math.max(availW / target.width, availH / target.height))
+  if (Math.abs(scale - fitScale) < 0.05) {
+    scale = clampScale(fitScale * 1.4)
+  }
+
+  const scaledW = target.width * scale
+  const scaledH = target.height * scale
+  const tx = (viewportWidth - scaledW) / 2 - target.x * scale
+  const ty =
+    scaledH <= availH
+      ? topPad + (availH - scaledH) / 2 - target.y * scale
+      : topPad - target.y * scale
+
+  return { scale, tx, ty }
+}
+
 /**
  * Pan ONLY (never changes scale) to bring a target mockup into view.
  * Horizontally centers the mockup; vertically centers it unless the mockup is taller

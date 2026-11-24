@@ -3,6 +3,8 @@ import {
   MAX_SCALE,
   MIN_SCALE,
   clampScale,
+  computeFillMockup,
+  computeFitMockup,
   computeFitViewport,
   computePanToTarget,
   panBy,
@@ -66,5 +68,13 @@ describe('viewport math', () => {
     expect(result.scale).toBe(1)
     const topOnScreen = result.ty + tallTarget.y * result.scale
     expect(topOnScreen).toBeGreaterThanOrEqual(76)
+  })
+
+  it('computes distinct fit (contain) and fill (cover) viewports for a single mockup', () => {
+    const mockup = { x: 100, y: 100, width: 900, height: 600 }
+    const fit = computeFitMockup(mockup, 800, 900)
+    const fill = computeFillMockup(mockup, 800, 900)
+    expect(fill.scale).toBeGreaterThan(fit.scale)
+    expect(fit.tx + mockup.width * fit.scale).toBeLessThanOrEqual(800)
   })
 })

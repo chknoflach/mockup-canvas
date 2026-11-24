@@ -335,6 +335,32 @@ describe('mountMockupCanvas', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', key: '.' }))
     expect(handle.getViewport().scale).toBeCloseTo(beforeKeyZoom, 6)
 
+    // Tapping Shift zooms current mockup to fit; tapping Shift again toggles to fill; tapping again returns to fit
+    vi.useFakeTimers()
+    try {
+      const tapShift = () => {
+        window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }))
+        window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift' }))
+        vi.advanceTimersByTime(300)
+      }
+      tapShift()
+      const fitScale = handle.getViewport().scale
+      tapShift()
+      const fillScale = handle.getViewport().scale
+      expect(fillScale).toBeGreaterThan(fitScale)
+      tapShift()
+      expect(handle.getViewport().scale).toBeCloseTo(fitScale, 4)
+
+      // Shift+other key does NOT trigger shift-tap zoom
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'A', shiftKey: true }))
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift' }))
+      vi.advanceTimersByTime(300)
+      expect(handle.getViewport().scale).toBeCloseTo(fitScale, 4)
+    } finally {
+      vi.useRealTimers()
+    }
+
     // Press 'c' to enter Changes mode
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c' }))
     expect(handle.isChangesMode()).toBe(true)
