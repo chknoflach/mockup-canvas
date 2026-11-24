@@ -1,13 +1,13 @@
-export { mountMockupCanvas } from './canvas'
+export { mountMockupCanvas } from './canvas.js'
 export {
   computePageLayout,
   findSpatialNeighbor,
   MOCKUP_HEADER_HEIGHT,
   GROUP_HEADER_HEIGHT,
   type SpatialDirection,
-} from './layout'
-export { describeElementSelector, indexToLetter, inspectMockupElement, nextNoteLetter } from './notes'
-export { buildDeepLink, parseDeepLink, resolveTarget } from './url'
+} from './layout.js'
+export { describeElementSelector, indexToLetter, inspectMockupElement, nextNoteLetter } from './notes.js'
+export { buildDeepLink, parseDeepLink, resolveTarget } from './url.js'
 export {
   clampScale,
   computeFillMockup,
@@ -19,7 +19,7 @@ export {
   zoomAtPoint,
   MIN_SCALE,
   MAX_SCALE,
-} from './viewport'
+} from './viewport.js'
 export type {
   CanvasNote,
   CanvasPage,
@@ -33,4 +33,4 @@ export type {
   NoteStatus,
   Rect,
   Viewport,
-} from './types'
+} from './types.js'

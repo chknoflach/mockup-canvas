@@ -1,4 +1,4 @@
-import type { CanvasPage, MockupGroup, MockupItem, Rect } from './types'
+import type { CanvasPage, MockupGroup, MockupItem, Rect } from './types.js'
 
 export const MOCKUP_HEADER_HEIGHT = 34
 export const GROUP_HEADER_HEIGHT = 52

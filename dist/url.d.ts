@@ -1,4 +1,4 @@
-import type { CanvasPage } from './types';
+import type { CanvasPage } from './types.js';
 export interface DeepLinkTarget {
     pageId: string | null;
     mockupId: string | null;

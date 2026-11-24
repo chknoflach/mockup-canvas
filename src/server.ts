@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { dirname, resolve } from 'node:path'
-import type { CanvasPersistedState } from './types'
+import type { CanvasPersistedState } from './types.js'
 
 export const DEFAULT_STATE_ENDPOINT = '/__mockup-canvas/state'
 export const DEFAULT_STATE_FILE = '.mockup-canvas/state.json'

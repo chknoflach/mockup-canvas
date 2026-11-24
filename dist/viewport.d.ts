@@ -1,4 +1,4 @@
-import type { Rect, Viewport } from './types';
+import type { Rect, Viewport } from './types.js';
 export declare const MIN_SCALE = 0.15;
 export declare const MAX_SCALE = 2.5;
 export declare const DEFAULT_FIT_PADDING = 72;

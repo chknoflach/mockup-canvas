@@ -3,8 +3,8 @@ import {
   findSpatialNeighbor,
   type PageLayout,
   type SpatialDirection,
-} from './layout'
-import { createStateStore, inspectMockupElement, nextNoteLetter } from './notes'
+} from './layout.js'
+import { createStateStore, inspectMockupElement, nextNoteLetter } from './notes.js'
 import type {
   CanvasNote,
   CanvasPage,
@@ -13,14 +13,14 @@ import type {
   MockupMode,
   NoteElementInfo,
   Viewport,
-} from './types'
+} from './types.js'
 import {
   buildDeepLink,
   parseDeepLink,
   readStoredScale,
   resolveTarget,
   writeStoredScale,
-} from './url'
+} from './url.js'
 import {
   clampScale,
   computeFillMockup,
@@ -31,7 +31,7 @@ import {
   interpolateViewport,
   panBy,
   zoomAtPoint,
-} from './viewport'
+} from './viewport.js'
 
 const RECENTER_ICON_SVG = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
   <path d="M2.5 5.5V3.5a1 1 0 0 1 1-1h2" />

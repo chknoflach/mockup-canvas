@@ -1,7 +1,7 @@
-import { computePageLayout, findSpatialNeighbor, } from './layout';
-import { createStateStore, inspectMockupElement, nextNoteLetter } from './notes';
-import { buildDeepLink, parseDeepLink, readStoredScale, resolveTarget, writeStoredScale, } from './url';
-import { clampScale, computeFillMockup, computeFitMockup, computeFitViewport, computeNavigateToMockup, computePanToTarget, interpolateViewport, panBy, zoomAtPoint, } from './viewport';
+import { computePageLayout, findSpatialNeighbor, } from './layout.js';
+import { createStateStore, inspectMockupElement, nextNoteLetter } from './notes.js';
+import { buildDeepLink, parseDeepLink, readStoredScale, resolveTarget, writeStoredScale, } from './url.js';
+import { clampScale, computeFillMockup, computeFitMockup, computeFitViewport, computeNavigateToMockup, computePanToTarget, interpolateViewport, panBy, zoomAtPoint, } from './viewport.js';
 const RECENTER_ICON_SVG = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
   <path d="M2.5 5.5V3.5a1 1 0 0 1 1-1h2" />
   <path d="M10.5 2.5h2a1 1 0 0 1 1 1v2" />

@@ -1,4 +1,4 @@
-import type { CanvasNote, CanvasPersistedState, NoteElementInfo, Rect } from './types'
+import type { CanvasNote, CanvasPersistedState, NoteElementInfo, Rect } from './types.js'
 
 /** Convert a 0-based index to spreadsheet-style letters: 0 -> "A", 25 -> "Z", 26 -> "AA". */
 export function indexToLetter(index: number): string {

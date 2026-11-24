@@ -1,4 +1,4 @@
-import type { CanvasNote, CanvasPersistedState, NoteElementInfo } from './types';
+import type { CanvasNote, CanvasPersistedState, NoteElementInfo } from './types.js';
 /** Convert a 0-based index to spreadsheet-style letters: 0 -> "A", 25 -> "Z", 26 -> "AA". */
 export declare function indexToLetter(index: number): string;
 /** Pick the next unused letter among open notes on a page (starts at "A"). */

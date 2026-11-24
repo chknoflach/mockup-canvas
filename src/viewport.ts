@@ -1,4 +1,4 @@
-import type { Rect, Viewport } from './types'
+import type { Rect, Viewport } from './types.js'
 
 export const MIN_SCALE = 0.15
 export const MAX_SCALE = 2.5

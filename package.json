@@ -1,6 +1,6 @@
 {
   "name": "mockup-canvas",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Zero-dependency multi-page infinite canvas for code-backed design mockups",
   "type": "module",
   "packageManager": "pnpm@11.28.5",

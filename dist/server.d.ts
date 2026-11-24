@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { CanvasPersistedState } from './types';
+import type { CanvasPersistedState } from './types.js';
 export declare const DEFAULT_STATE_ENDPOINT = "/__mockup-canvas/state";
 export declare const DEFAULT_STATE_FILE = ".mockup-canvas/state.json";
 export declare function readStateFile(filePath: string): CanvasPersistedState;
