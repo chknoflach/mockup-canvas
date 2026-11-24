@@ -1,10 +1,10 @@
 /* mockup-canvas — calm, minimal, zero-blur infinite canvas chrome */
 
-.mc-root {
+.mc-shell {
   --mc-bg: #f4f4f2;
   --mc-dot: #dcdcd8;
   --mc-surface: #ffffff;
-  --mc-surface-muted: #f8f8f6;
+  --mc-surface-muted: #f3f3f0;
   --mc-border: #e2e2dd;
   --mc-border-strong: #c9c9c2;
   --mc-text: #18181b;
@@ -16,39 +16,32 @@
   --mc-font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, monospace;
 
   position: relative;
+  display: flex;
   width: 100%;
   height: 100%;
   min-height: 100vh;
   overflow: hidden;
   overscroll-behavior: none;
   background-color: var(--mc-bg);
-  background-image: radial-gradient(circle, var(--mc-dot) 1px, transparent 1px);
-  background-size: 24px 24px;
   color: var(--mc-text);
   font-family: var(--mc-font-sans);
-  user-select: none;
-  -webkit-user-select: none;
-  touch-action: none;
-  cursor: grab;
   box-sizing: border-box;
+  container-type: inline-size;
+  container-name: mc-shell;
 }
 
-.mc-root *,
-.mc-root *::before,
-.mc-root *::after {
+.mc-shell *,
+.mc-shell *::before,
+.mc-shell *::after {
   box-sizing: border-box;
-}
-
-.mc-root[data-mc-dragging='true'] {
-  cursor: grabbing;
 }
 
 @media (prefers-color-scheme: dark) {
-  .mc-root:not([data-mc-theme='light']) {
+  .mc-shell:not([data-mc-theme='light']) {
     --mc-bg: #111113;
     --mc-dot: #26262a;
     --mc-surface: #1a1a1e;
-    --mc-surface-muted: #151518;
+    --mc-surface-muted: #242429;
     --mc-border: #2a2a30;
     --mc-border-strong: #3e3e46;
     --mc-text: #f2f2f0;
@@ -59,11 +52,11 @@
   }
 }
 
-.mc-root[data-mc-theme='dark'] {
+.mc-shell[data-mc-theme='dark'] {
   --mc-bg: #111113;
   --mc-dot: #26262a;
   --mc-surface: #1a1a1e;
-  --mc-surface-muted: #151518;
+  --mc-surface-muted: #242429;
   --mc-border: #2a2a30;
   --mc-border-strong: #3e3e46;
   --mc-text: #f2f2f0;
@@ -71,6 +64,166 @@
   --mc-active-bg: #f2f2f0;
   --mc-active-fg: #111113;
   --mc-frame-bg: #16161a;
+}
+
+/* Desktop left scrolling side-panel for pages */
+.mc-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--mc-surface);
+  border-right: 1px solid var(--mc-border);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 12px 8px;
+}
+
+.mc-sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mc-page-item {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--mc-text-muted);
+  font-family: var(--mc-font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.3;
+  text-align: left;
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+.mc-page-item:hover {
+  color: var(--mc-text);
+  background: var(--mc-surface-muted);
+}
+
+.mc-page-item[aria-current='page'] {
+  background: var(--mc-surface-muted);
+  color: var(--mc-text);
+  font-weight: 600;
+}
+
+/* Infinite canvas stage */
+.mc-root {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background-color: var(--mc-bg);
+  background-image: radial-gradient(circle, var(--mc-dot) 1px, transparent 1px);
+  background-size: 24px 24px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  cursor: grab;
+}
+
+.mc-root[data-mc-dragging='true'] {
+  cursor: grabbing;
+}
+
+/* Responsive floating dropdown top-left (shown below 900px) */
+.mc-dropdown {
+  display: none;
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 20;
+  cursor: default;
+}
+
+.mc-dropdown-trigger {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  max-width: min(260px, calc(100vw - 84px));
+  padding: 0 10px 0 12px;
+  background: var(--mc-surface);
+  color: var(--mc-text);
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+  font-family: var(--mc-font-sans);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.mc-dropdown-trigger:hover {
+  border-color: var(--mc-border-strong);
+}
+
+.mc-dropdown-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mc-dropdown-chevron {
+  flex-shrink: 0;
+  color: var(--mc-text-muted);
+}
+
+.mc-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  max-width: min(300px, calc(100vw - 32px));
+  max-height: min(360px, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+}
+
+.mc-dropdown-menu[hidden] {
+  display: none;
+}
+
+@container mc-shell (max-width: 899px) {
+  .mc-sidebar {
+    display: none;
+  }
+
+  .mc-dropdown {
+    display: block;
+  }
+}
+
+/* Fallback for environments without container query support */
+@supports not (container-type: inline-size) {
+  @media (max-width: 899px) {
+    .mc-sidebar {
+      display: none;
+    }
+
+    .mc-dropdown {
+      display: block;
+    }
+  }
 }
 
 /* World layer transformed via translate3d + scale */
@@ -82,52 +235,9 @@
   will-change: transform;
 }
 
-/* Top-left multi-page switcher */
-.mc-pages {
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 20;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px;
-  background: var(--mc-surface);
-  border: 1px solid var(--mc-border);
-  border-radius: 8px;
-  max-width: calc(100vw - 96px);
-  overflow-x: auto;
-  cursor: default;
-}
-
-.mc-page-btn {
-  appearance: none;
-  border: none;
-  background: transparent;
-  color: var(--mc-text-muted);
-  font-family: var(--mc-font-sans);
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1;
-  padding: 7px 11px;
-  border-radius: 5px;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.mc-page-btn:hover {
-  color: var(--mc-text);
-}
-
-.mc-page-btn[aria-current='page'] {
-  background: var(--mc-surface-muted);
-  color: var(--mc-text);
-  font-weight: 600;
-}
-
 /* Top-right single recenter icon control */
 .mc-recenter {
-  position: fixed;
+  position: absolute;
   top: 16px;
   right: 16px;
   z-index: 20;
@@ -150,7 +260,8 @@
 }
 
 .mc-recenter:focus-visible,
-.mc-page-btn:focus-visible,
+.mc-page-item:focus-visible,
+.mc-dropdown-trigger:focus-visible,
 .mc-toggle-btn:focus-visible,
 .mc-mockup-id:focus-visible {
   outline: 2px solid var(--mc-text);

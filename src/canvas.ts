@@ -30,6 +30,10 @@ const RECENTER_ICON_SVG = `<svg width="16" height="16" viewBox="0 0 16 16" fill=
   <circle cx="8" cy="8" r="1.5" />
 </svg>`
 
+const CHEVRON_ICON_SVG = `<svg class="mc-dropdown-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M3 4.5 6 7.5 9 4.5" />
+</svg>`
+
 const ANIMATION_MS = 220
 
 export function mountMockupCanvas(
@@ -39,37 +43,91 @@ export function mountMockupCanvas(
   const { pages } = config
   const storageKey = config.storageKey ?? 'mockup-canvas:scale'
 
+  const shell = document.createElement('div')
+  shell.className = 'mc-shell'
+  if (config.theme && config.theme !== 'auto') {
+    shell.dataset.mcTheme = config.theme
+  }
+
   const root = document.createElement('div')
   root.className = 'mc-root'
-  if (config.theme && config.theme !== 'auto') {
-    root.dataset.mcTheme = config.theme
-  }
 
   const world = document.createElement('div')
   world.className = 'mc-world'
   root.appendChild(world)
 
-  // Top-left multi-page switcher
-  const pagesNav = document.createElement('nav')
-  pagesNav.className = 'mc-pages'
-  pagesNav.setAttribute('aria-label', 'Canvas pages')
-  pagesNav.dataset.mcInteractive = 'true'
+  // Desktop left scrolling side-panel
+  const sidebar = document.createElement('aside')
+  sidebar.className = 'mc-sidebar'
+  sidebar.setAttribute('aria-label', 'Canvas pages')
 
-  const pageButtons = new Map<string, HTMLButtonElement>()
-  for (const page of pages) {
-    const btn = document.createElement('button')
-    btn.type = 'button'
-    btn.className = 'mc-page-btn'
-    btn.textContent = page.title
-    btn.dataset.mcPageId = page.id
-    btn.addEventListener('click', () => {
-      goTo({ pageId: page.id, animate: false })
-    })
-    pagesNav.appendChild(btn)
-    pageButtons.set(page.id, btn)
+  const sidebarList = document.createElement('nav')
+  sidebarList.className = 'mc-sidebar-list'
+  sidebar.appendChild(sidebarList)
+
+  // Responsive top-left floating dropdown
+  const dropdown = document.createElement('div')
+  dropdown.className = 'mc-dropdown'
+  dropdown.dataset.mcInteractive = 'true'
+
+  const dropdownTrigger = document.createElement('button')
+  dropdownTrigger.type = 'button'
+  dropdownTrigger.className = 'mc-dropdown-trigger'
+  dropdownTrigger.setAttribute('aria-haspopup', 'listbox')
+  dropdownTrigger.setAttribute('aria-expanded', 'false')
+
+  const dropdownLabel = document.createElement('span')
+  dropdownLabel.className = 'mc-dropdown-label'
+  dropdownTrigger.appendChild(dropdownLabel)
+  dropdownTrigger.insertAdjacentHTML('beforeend', CHEVRON_ICON_SVG)
+
+  const dropdownMenu = document.createElement('div')
+  dropdownMenu.className = 'mc-dropdown-menu'
+  dropdownMenu.setAttribute('role', 'listbox')
+  dropdownMenu.setAttribute('aria-label', 'Canvas pages')
+  dropdownMenu.hidden = true
+
+  dropdown.append(dropdownTrigger, dropdownMenu)
+
+  function setDropdownOpen(open: boolean): void {
+    dropdownMenu.hidden = !open
+    dropdownTrigger.setAttribute('aria-expanded', String(open))
   }
+
+  dropdownTrigger.addEventListener('click', (e) => {
+    e.stopPropagation()
+    setDropdownOpen(dropdownMenu.hidden)
+  })
+
+  const pageButtons = new Map<string, HTMLButtonElement[]>()
+  for (const page of pages) {
+    const createPageButton = (source: 'sidebar' | 'dropdown') => {
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'mc-page-item'
+      btn.textContent = page.title
+      btn.dataset.mcPageId = page.id
+      btn.dataset.mcPageSource = source
+      if (source === 'dropdown') {
+        btn.setAttribute('role', 'option')
+      }
+      btn.addEventListener('click', () => {
+        setDropdownOpen(false)
+        goTo({ pageId: page.id, animate: false })
+      })
+      return btn
+    }
+
+    const sideBtn = createPageButton('sidebar')
+    const dropBtn = createPageButton('dropdown')
+    sidebarList.appendChild(sideBtn)
+    dropdownMenu.appendChild(dropBtn)
+    pageButtons.set(page.id, [sideBtn, dropBtn])
+  }
+
   if (pages.length > 0) {
-    root.appendChild(pagesNav)
+    shell.appendChild(sidebar)
+    root.appendChild(dropdown)
   }
 
   // Top-right recenter icon control
@@ -83,7 +141,8 @@ export function mountMockupCanvas(
   recenterBtn.addEventListener('click', () => recenter(true))
   root.appendChild(recenterBtn)
 
-  container.replaceChildren(root)
+  shell.appendChild(root)
+  container.replaceChildren(shell)
 
   // Internal state
   let activePage: CanvasPage | null = null
@@ -214,11 +273,20 @@ export function mountMockupCanvas(
     const layout = computePageLayout(page)
     activeLayout = layout
 
-    for (const [id, btn] of pageButtons) {
-      if (id === page.id) {
-        btn.setAttribute('aria-current', 'page')
-      } else {
-        btn.removeAttribute('aria-current')
+    dropdownLabel.textContent = page.title
+    for (const [id, buttons] of pageButtons) {
+      for (const btn of buttons) {
+        if (id === page.id) {
+          btn.setAttribute('aria-current', 'page')
+          if (btn.getAttribute('role') === 'option') {
+            btn.setAttribute('aria-selected', 'true')
+          }
+        } else {
+          btn.removeAttribute('aria-current')
+          if (btn.getAttribute('role') === 'option') {
+            btn.setAttribute('aria-selected', 'false')
+          }
+        }
       }
     }
 
@@ -434,6 +502,10 @@ export function mountMockupCanvas(
 
   // Trackpad pan (two-finger scroll) + pinch/Cmd/Ctrl zoom toward cursor
   const onWheel = (e: WheelEvent) => {
+    // Let interactive overlays (such as the responsive page dropdown menu) scroll natively.
+    if (e.target instanceof Element && e.target.closest('[data-mc-interactive="true"]')) {
+      return
+    }
     // Allow normal inner scrolling only when hovering an active mockup frame without zoom modifier.
     if (!e.ctrlKey && !e.metaKey && e.target instanceof Element) {
       const activeFrame = e.target.closest('.mc-mockup[data-mc-mode="active"] .mc-frame')
@@ -460,12 +532,22 @@ export function mountMockupCanvas(
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && !dropdownMenu.hidden) {
+      setDropdownOpen(false)
+      return
+    }
     if (e.code === 'Space' && !e.repeat) {
       const tag = (e.target as HTMLElement | null)?.tagName
       if (tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
         spaceHeld = true
         root.dataset.mcSpace = 'true'
       }
+    }
+  }
+
+  const onDocumentPointerDown = (e: PointerEvent) => {
+    if (!dropdownMenu.hidden && e.target instanceof Node && !dropdown.contains(e.target)) {
+      setDropdownOpen(false)
     }
   }
 
@@ -515,6 +597,7 @@ export function mountMockupCanvas(
   window.addEventListener('keyup', onKeyUp)
   window.addEventListener('popstate', onUrlChange)
   window.addEventListener('hashchange', onUrlChange)
+  document.addEventListener('pointerdown', onDocumentPointerDown)
 
   // Initial mount from URL (or default page fit)
   const initialTarget = parseDeepLink(window.location.search, window.location.hash)
@@ -558,7 +641,8 @@ export function mountMockupCanvas(
       window.removeEventListener('keyup', onKeyUp)
       window.removeEventListener('popstate', onUrlChange)
       window.removeEventListener('hashchange', onUrlChange)
-      root.remove()
+      document.removeEventListener('pointerdown', onDocumentPointerDown)
+      shell.remove()
     },
   }
 }

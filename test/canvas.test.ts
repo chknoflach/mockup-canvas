@@ -66,18 +66,45 @@ describe('mountMockupCanvas', () => {
     handle.destroy()
   })
 
-  it('renders big-type group headers and switches pages cleanly', () => {
+  it('renders big-type group headers and switches pages via side-panel and responsive dropdown', () => {
     const container = document.getElementById('root')!
     const handle = mountMockupCanvas(container, { pages: PAGES })
 
     const groupTitles = Array.from(container.querySelectorAll('.mc-group-header')).map((el) => el.textContent)
     expect(groupTitles).toEqual(['Order summary', 'Payment states'])
 
-    const passkeyBtn = container.querySelector<HTMLButtonElement>('[data-mc-page-id="passkeys"]')!
-    passkeyBtn.click()
+    // Switch via side-panel list
+    const sidePasskeyBtn = container.querySelector<HTMLButtonElement>(
+      '[data-mc-page-source="sidebar"][data-mc-page-id="passkeys"]',
+    )!
+    sidePasskeyBtn.click()
     expect(handle.getActivePageId()).toBe('passkeys')
     expect(container.querySelectorAll('.mc-mockup').length).toBe(1)
     expect(container.querySelector('.mc-mockup-id')?.textContent).toBe('C.1')
+    expect(container.querySelector('.mc-dropdown-label')?.textContent).toBe('Passkey setup')
+
+    // Switch back via responsive top-left dropdown
+    const trigger = container.querySelector<HTMLButtonElement>('.mc-dropdown-trigger')!
+    const menu = container.querySelector<HTMLElement>('.mc-dropdown-menu')!
+    expect(menu.hidden).toBe(true)
+    trigger.click()
+    expect(menu.hidden).toBe(false)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+
+    const dropCheckoutBtn = container.querySelector<HTMLButtonElement>(
+      '[data-mc-page-source="dropdown"][data-mc-page-id="checkout"]',
+    )!
+    dropCheckoutBtn.click()
+    expect(handle.getActivePageId()).toBe('checkout')
+    expect(menu.hidden).toBe(true)
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    expect(container.querySelector('.mc-dropdown-label')?.textContent).toBe('Checkout flow')
+
+    // Escape closes an open dropdown
+    trigger.click()
+    expect(menu.hidden).toBe(false)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(menu.hidden).toBe(true)
 
     handle.destroy()
   })

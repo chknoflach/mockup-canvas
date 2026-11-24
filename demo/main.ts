@@ -43,6 +43,32 @@ if (stateParam) {
           },
         ],
       },
+      {
+        id: 'invoice-drawer',
+        title: 'Invoice drawer',
+        groups: [
+          {
+            title: 'Loading & retry',
+            items: [
+              { id: 'D.1', title: 'Summary', width: 900, height: 560, src: '?state=order-default' },
+              { id: 'D.2', title: 'Failure', width: 520, height: 420, src: '?state=failed-notice' },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'mobile-checkout',
+        title: 'Mobile checkout',
+        groups: [
+          {
+            title: 'Phone viewport',
+            items: [
+              { id: 'E.1', title: 'Order', width: 390, height: 640, src: '?state=order-mobile' },
+              { id: 'E.2', title: 'Verify', width: 390, height: 460, src: '?state=first-login' },
+            ],
+          },
+        ],
+      },
     ],
   })
 }
