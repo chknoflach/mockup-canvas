@@ -155,9 +155,48 @@ export function mountMockupCanvas(
 
   dropdown.append(dropdownTrigger, dropdownMenu)
 
+  let highlightedPageIndex = 0
+
+  function syncPageHighlight(open: boolean): void {
+    pages.forEach((page, idx) => {
+      const entries = pageButtons.get(page.id)
+      if (!entries) return
+      for (const { btn } of entries) {
+        if (open && idx === highlightedPageIndex) {
+          btn.dataset.mcHighlighted = 'true'
+          if (typeof btn.scrollIntoView === 'function') {
+            btn.scrollIntoView({ block: 'nearest' })
+          }
+        } else {
+          delete btn.dataset.mcHighlighted
+        }
+      }
+    })
+  }
+
   function setDropdownOpen(open: boolean): void {
+    if (open && pages.length > 0) {
+      const activeIdx = activePage ? pages.findIndex((p) => p.id === activePage!.id) : 0
+      highlightedPageIndex = activeIdx >= 0 ? activeIdx : 0
+    }
     dropdownMenu.hidden = !open
     dropdownTrigger.setAttribute('aria-expanded', String(open))
+    sidebar.dataset.mcPageNav = open ? 'true' : 'false'
+    syncPageHighlight(open)
+  }
+
+  function movePageHighlight(delta: -1 | 1): void {
+    if (pages.length === 0) return
+    highlightedPageIndex = (highlightedPageIndex + delta + pages.length) % pages.length
+    syncPageHighlight(true)
+  }
+
+  function confirmPageHighlight(): void {
+    const target = pages[highlightedPageIndex]
+    setDropdownOpen(false)
+    if (target) {
+      goTo({ pageId: target.id, animate: false })
+    }
   }
 
   dropdownTrigger.addEventListener('click', (e) => {
@@ -166,7 +205,7 @@ export function mountMockupCanvas(
   })
 
   const pageButtons = new Map<string, Array<{ btn: HTMLButtonElement; dot: HTMLSpanElement }>>()
-  for (const page of pages) {
+  pages.forEach((page, pageIdx) => {
     const createPageButton = (source: 'sidebar' | 'dropdown') => {
       const btn = document.createElement('button')
       btn.type = 'button'
@@ -187,6 +226,12 @@ export function mountMockupCanvas(
       dot.hidden = true
 
       btn.append(label, dot)
+      btn.addEventListener('pointerenter', () => {
+        if (!dropdownMenu.hidden) {
+          highlightedPageIndex = pageIdx
+          syncPageHighlight(true)
+        }
+      })
       btn.addEventListener('click', () => {
         setDropdownOpen(false)
         goTo({ pageId: page.id, animate: false })
@@ -199,7 +244,7 @@ export function mountMockupCanvas(
     sidebarList.appendChild(sideItem.btn)
     dropdownMenu.appendChild(dropItem.btn)
     pageButtons.set(page.id, [sideItem, dropItem])
-  }
+  })
 
   if (pages.length > 0) {
     shell.appendChild(sidebar)
@@ -324,7 +369,6 @@ export function mountMockupCanvas(
   const mockupElements = new Map<string, MockupDomEntry>()
   let activeCleanups: Array<() => void> = []
   let animRaf: number | null = null
-  let spaceHeld = false
   let shiftTapCandidate = false
   let shiftDownAt = 0
   let noteMode = false
@@ -1146,7 +1190,7 @@ export function mountMockupCanvas(
   function isInteractiveTarget(target: EventTarget | null): boolean {
     if (!(target instanceof Element)) return false
     if (target.closest('[data-mc-interactive="true"]')) return true
-    if (!spaceHeld && !noteMode) {
+    if (!noteMode) {
       const activeFrame = target.closest('.mc-mockup[data-mc-mode="active"] .mc-frame')
       if (activeFrame) return true
     }
@@ -1159,7 +1203,7 @@ export function mountMockupCanvas(
     if (e.button === 0 && isInteractiveTarget(e.target)) return
 
     // In note mode, left-click on a mockup places a note pin instead of dragging the canvas
-    if (noteMode && e.button === 0 && !spaceHeld && activePage) {
+    if (noteMode && e.button === 0 && activePage) {
       const hit = findMockupEntryFromTarget(e.target)
       if (hit) {
         e.preventDefault()
@@ -1225,7 +1269,7 @@ export function mountMockupCanvas(
       return
     }
 
-    if (!noteMode || spaceHeld || !popoverEl.hidden) {
+    if (!noteMode || !popoverEl.hidden) {
       clearHoverOutline()
       return
     }
@@ -1347,6 +1391,31 @@ export function mountMockupCanvas(
     if (isTypingTarget(e.target)) return
 
     if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (e.code === 'Space' && !e.repeat && pages.length > 0) {
+        e.preventDefault()
+        setChangedMenuOpen(false)
+        setDropdownOpen(dropdownMenu.hidden)
+        return
+      }
+
+      if (!dropdownMenu.hidden) {
+        if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+          e.preventDefault()
+          movePageHighlight(1)
+          return
+        }
+        if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+          e.preventDefault()
+          movePageHighlight(-1)
+          return
+        }
+        if (e.key === 'Enter') {
+          e.preventDefault()
+          confirmPageHighlight()
+          return
+        }
+      }
+
       if (!changedMenu.hidden) {
         if (e.key === 'ArrowDown') {
           e.preventDefault()
@@ -1427,12 +1496,6 @@ export function mountMockupCanvas(
         }
       }
     }
-
-    if (e.code === 'Space' && !e.repeat) {
-      spaceHeld = true
-      root.dataset.mcSpace = 'true'
-      clearHoverOutline()
-    }
   }
 
   const onKeyUp = (e: KeyboardEvent) => {
@@ -1445,11 +1508,6 @@ export function mountMockupCanvas(
         toggleShiftFitFill()
       }
       shiftTapCandidate = false
-      return
-    }
-    if (e.code === 'Space') {
-      spaceHeld = false
-      delete root.dataset.mcSpace
     }
   }
 

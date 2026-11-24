@@ -107,6 +107,23 @@ describe('mountMockupCanvas', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(menu.hidden).toBe(true)
 
+    // Space toggles page switcher; arrow keys navigate with wrap-around; Enter confirms switch
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }))
+    expect(menu.hidden).toBe(false)
+    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcPageId).toBe('checkout')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcPageId).toBe('passkeys')
+    expect(handle.getActivePageId()).toBe('checkout')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    expect(menu.hidden).toBe(true)
+    expect(handle.getActivePageId()).toBe('passkeys')
+
+    // Space again toggles open, then Space again closes without switching
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }))
+    expect(menu.hidden).toBe(false)
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Space', key: ' ' }))
+    expect(menu.hidden).toBe(true)
+
     handle.destroy()
   })
 
