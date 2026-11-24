@@ -70,11 +70,21 @@ describe('viewport math', () => {
     expect(topOnScreen).toBeGreaterThanOrEqual(76)
   })
 
-  it('computes distinct fit (contain) and fill (cover) viewports for a single mockup', () => {
-    const mockup = { x: 100, y: 100, width: 900, height: 600 }
-    const fit = computeFitMockup(mockup, 800, 900)
-    const fill = computeFillMockup(mockup, 800, 900)
-    expect(fill.scale).toBeGreaterThan(fit.scale)
-    expect(fit.tx + mockup.width * fit.scale).toBeLessThanOrEqual(800)
+  it('computes fit vs fill-width/100% without ever clipping horizontally', () => {
+    // Wide desktop mockup in narrow sidebar: fit has margins, fill fills width edge-to-edge without horizontal clip
+    const wide = { x: 100, y: 100, width: 900, height: 600 }
+    const wideFit = computeFitMockup(wide, 800, 900)
+    const wideFill = computeFillMockup(wide, 800, 900)
+    expect(wideFill.scale).toBeGreaterThan(wideFit.scale)
+    expect(wideFill.tx + wide.x * wideFill.scale).toBeGreaterThanOrEqual(10)
+    expect(wideFill.tx + (wide.x + wide.width) * wideFill.scale).toBeLessThanOrEqual(790)
+
+    // Tall phone mockup: fit shows whole phone (<1x), fill snaps to crisp 100% top-aligned
+    const tallPhone = { x: 0, y: 0, width: 390, height: 1400 }
+    const phoneFit = computeFitMockup(tallPhone, 800, 900)
+    const phoneFill = computeFillMockup(tallPhone, 800, 900)
+    expect(phoneFit.scale).toBeLessThan(1)
+    expect(phoneFill.scale).toBe(1)
+    expect(phoneFill.ty).toBe(64)
   })
 })

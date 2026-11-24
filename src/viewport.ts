@@ -61,7 +61,7 @@ export function computeFitViewport(
   return { tx, ty, scale }
 }
 
-/** Zoom and center a single mockup so its entire box fits inside the viewport (contain). */
+/** Zoom and center a single mockup so its entire box fits inside the viewport with breathing room (capped at 1x). */
 export function computeFitMockup(
   target: Rect,
   viewportWidth: number,
@@ -75,7 +75,7 @@ export function computeFitMockup(
   const availW = Math.max(1, viewportWidth - padding * 2)
   const availH = Math.max(1, viewportHeight - topPad - padding)
 
-  const scale = clampScale(Math.min(availW / target.width, availH / target.height))
+  const scale = clampScale(Math.min(1, availW / target.width, availH / target.height))
   const scaledW = target.width * scale
   const scaledH = target.height * scale
 
@@ -86,24 +86,36 @@ export function computeFitMockup(
   }
 }
 
-/** Zoom a single mockup to fill the viewport along the looser axis (cover), keeping the header visible. */
+/**
+ * Fill-width / 100% zoom for a single mockup without horizontal clipping:
+ * - Wider than viewport -> fills width edge-to-edge, top-aligned if tall.
+ * - Taller than viewport (fits horizontally at 1x) -> 100% actual size, top-aligned.
+ * - Already fits at 1x -> scales cleanly to fill the tighter viewport edge with minimal margin.
+ */
 export function computeFillMockup(
   target: Rect,
   viewportWidth: number,
   viewportHeight: number,
-  padding = 24,
+  edgePadding = 12,
 ): Viewport {
   if (target.width <= 0 || target.height <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
-    return { tx: padding, ty: TOP_CHROME_CLEARANCE, scale: 1 }
+    return { tx: edgePadding, ty: TOP_CHROME_CLEARANCE, scale: 1 }
   }
-  const topPad = Math.max(padding, TOP_CHROME_CLEARANCE)
-  const availW = Math.max(1, viewportWidth - padding * 2)
-  const availH = Math.max(1, viewportHeight - topPad - padding)
+  const topPad = 64
+  const availW = Math.max(1, viewportWidth - edgePadding * 2)
+  const availH = Math.max(1, viewportHeight - topPad - edgePadding)
 
-  const fitScale = clampScale(Math.min(availW / target.width, availH / target.height))
-  let scale = clampScale(Math.max(availW / target.width, availH / target.height))
-  if (Math.abs(scale - fitScale) < 0.05) {
-    scale = clampScale(fitScale * 1.4)
+  const widthScale = availW / target.width
+  const heightScale = availH / target.height
+  const fit = computeFitMockup(target, viewportWidth, viewportHeight)
+
+  let scale: number
+  if (target.width > availW) {
+    scale = clampScale(widthScale)
+  } else if (fit.scale < 1) {
+    scale = 1
+  } else {
+    scale = clampScale(Math.min(widthScale, heightScale))
   }
 
   const scaledW = target.width * scale
