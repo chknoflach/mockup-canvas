@@ -245,7 +245,14 @@ describe('mountMockupCanvas', () => {
     container.querySelector<HTMLButtonElement>('.mc-note-submit')!.click()
     expect(handle.getNotes().map((n) => n.letter)).toEqual(['A', 'B'])
 
-    // Escape exits note mode
+    // Escape while focused in the note input closes ONLY the popover and keeps note mode active
+    shield.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 240, clientY: 220, bubbles: true }))
+    expect(popover.hidden).toBe(false)
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    expect(popover.hidden).toBe(true)
+    expect(handle.isNoteMode()).toBe(true)
+
+    // Second Escape (with no note popup open) exits note mode
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
     expect(handle.isNoteMode()).toBe(false)
 

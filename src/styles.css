@@ -559,15 +559,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--mc-active-bg);
-  color: var(--mc-active-fg);
+  background: transparent;
+  color: var(--mc-text-muted);
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
   cursor: pointer;
 }
 
 .mc-note-submit:hover {
-  opacity: 0.88;
+  color: var(--mc-text);
 }
 
 .mc-note-delete {

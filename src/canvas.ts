@@ -418,9 +418,11 @@ export function mountMockupCanvas(
   popoverTextarea.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
+      e.stopPropagation()
       submitPopover()
     } else if (e.key === 'Escape') {
       e.preventDefault()
+      e.stopPropagation()
       closePopover()
     }
   })
