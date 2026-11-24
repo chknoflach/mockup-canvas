@@ -259,6 +259,77 @@ describe('mountMockupCanvas', () => {
     handle.destroy()
   })
 
+  it('steps through changed screens with the 3-segment control and arrow shortcuts (pan-only)', () => {
+    const container = document.getElementById('root')!
+    const pagesWithChanges: CanvasPage[] = [
+      {
+        ...PAGES[0]!,
+        groups: [
+          {
+            ...PAGES[0]!.groups[0]!,
+            items: [
+              PAGES[0]!.groups[0]!.items[0]!,
+              { ...PAGES[0]!.groups[0]!.items[1]!, changed: true },
+            ],
+          },
+          PAGES[0]!.groups[1]!,
+        ],
+      },
+      {
+        ...PAGES[1]!,
+        groups: [
+          {
+            ...PAGES[1]!.groups[0]!,
+            items: [{ ...PAGES[1]!.groups[0]!.items[0]!, changed: true }],
+          },
+        ],
+      },
+    ]
+
+    const handle = mountMockupCanvas(container, { pages: pagesWithChanges, stateEndpoint: false })
+
+    const changedGroup = container.querySelector<HTMLElement>('.mc-changed-group')!
+    expect(changedGroup.hidden).toBe(false)
+    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('2')
+
+    // Zoom to a custom scale first so we prove stepping pans ONLY without changing zoom
+    const rootEl = container.querySelector('.mc-root')!
+    rootEl.dispatchEvent(
+      new WheelEvent('wheel', { ctrlKey: true, deltaY: -50, clientX: 500, clientY: 300, cancelable: true }),
+    )
+    const customScale = handle.getViewport().scale
+
+    // Right arrow -> first changed screen (A.2 on checkout)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    expect(handle.getActivePageId()).toBe('checkout')
+    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('1/2')
+    expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
+
+    // Right arrow again -> second changed screen (C.1 on passkeys)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    expect(handle.getActivePageId()).toBe('passkeys')
+    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('2/2')
+    expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
+
+    // Left arrow -> back to A.2 on checkout
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+    expect(handle.getActivePageId()).toBe('checkout')
+    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('1/2')
+    expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
+
+    // Down arrow opens the changed list; Escape closes it
+    const menu = container.querySelector<HTMLElement>('.mc-changed-menu')!
+    expect(menu.hidden).toBe(true)
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    expect(menu.hidden).toBe(false)
+    expect(menu.querySelectorAll('.mc-changed-row').length).toBe(2)
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(menu.hidden).toBe(true)
+
+    handle.destroy()
+  })
+
   it('contains zero blur() calls anywhere in styles.css', () => {
     expect(stylesCss).not.toMatch(/blur\s*\(/i)
   })

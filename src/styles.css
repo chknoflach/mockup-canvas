@@ -175,7 +175,7 @@
   align-items: center;
   gap: 8px;
   height: 34px;
-  max-width: min(260px, calc(100vw - 124px));
+  max-width: min(240px, calc(100cqw - 230px));
   padding: 0 10px 0 12px;
   background: var(--mc-surface);
   color: var(--mc-text);
@@ -257,7 +257,7 @@
   will-change: transform;
 }
 
-/* Top-right controls (note mode toggle + recenter icon) */
+/* Top-right meta control section: changed-screens stepper + note/recenter toolbar */
 .mc-controls {
   position: absolute;
   top: 16px;
@@ -265,36 +265,174 @@
   z-index: 20;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   cursor: default;
 }
 
-.mc-icon-btn {
-  width: 34px;
+.mc-control-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
   height: 34px;
-  padding: 0;
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+}
+
+.mc-control-group[hidden] {
+  display: none;
+}
+
+.mc-seg-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--mc-text-muted);
+  height: 100%;
+  padding: 0 9px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--mc-surface);
-  color: var(--mc-text-muted);
-  border: 1px solid var(--mc-border);
-  border-radius: 8px;
+  gap: 6px;
+  font-family: var(--mc-font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
   cursor: pointer;
 }
 
-.mc-icon-btn:hover {
-  color: var(--mc-text);
-  border-color: var(--mc-border-strong);
+.mc-seg-btn:first-child {
+  border-radius: 7px 0 0 7px;
 }
 
-.mc-icon-btn[aria-pressed='true'] {
+.mc-seg-btn:last-child {
+  border-radius: 0 7px 7px 0;
+}
+
+.mc-seg-btn + .mc-seg-btn {
+  border-left: 1px solid var(--mc-border);
+}
+
+.mc-seg-btn:hover {
+  color: var(--mc-text);
+  background: var(--mc-surface-muted);
+}
+
+.mc-seg-btn[aria-expanded='true'] {
+  color: var(--mc-text);
+  background: var(--mc-surface-muted);
+}
+
+.mc-seg-btn[aria-pressed='true'] {
   background: var(--mc-active-bg);
   color: var(--mc-active-fg);
-  border-color: var(--mc-active-bg);
 }
 
-.mc-icon-btn:focus-visible,
+.mc-seg-icon {
+  width: 32px;
+  padding: 0;
+}
+
+.mc-changed-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--mc-changed-bg);
+  flex-shrink: 0;
+}
+
+.mc-changed-count {
+  color: var(--mc-text);
+  white-space: nowrap;
+}
+
+.mc-changed-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 240px;
+  max-width: min(320px, calc(100vw - 32px));
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+}
+
+.mc-changed-menu[hidden] {
+  display: none;
+}
+
+.mc-changed-row {
+  appearance: none;
+  border: none;
+  background: transparent;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  font-family: var(--mc-font-sans);
+  cursor: pointer;
+}
+
+.mc-changed-row:hover {
+  background: var(--mc-surface-muted);
+}
+
+.mc-changed-row[aria-current='true'] {
+  background: var(--mc-surface-muted);
+}
+
+.mc-changed-row-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mc-changed-row-id {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--mc-changed-bg);
+  color: var(--mc-changed-fg);
+  font-family: var(--mc-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.mc-changed-row-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mc-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mc-changed-row-page {
+  font-size: 11px;
+  color: var(--mc-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mc-seg-btn:focus-visible,
+.mc-changed-row:focus-visible,
 .mc-page-item:focus-visible,
 .mc-dropdown-trigger:focus-visible,
 .mc-toggle-btn:focus-visible,

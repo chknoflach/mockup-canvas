@@ -48,6 +48,14 @@ const CHEVRON_ICON_SVG = `<svg class="mc-dropdown-chevron" width="12" height="12
   <path d="M3 4.5 6 7.5 9 4.5" />
 </svg>`
 
+const PREV_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M10 3.5 5.5 8 10 12.5" />
+</svg>`
+
+const NEXT_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M6 3.5 10.5 8 6 12.5" />
+</svg>`
+
 const ANIMATION_MS = 220
 const DEFAULT_STATE_ENDPOINT = '/__mockup-canvas/state'
 const STATE_POLL_MS = 3000
@@ -175,14 +183,60 @@ export function mountMockupCanvas(
     root.appendChild(dropdown)
   }
 
-  // Top-right controls: Note mode toggle + Recenter
+  // Top-right meta controls: changed-screens 3-segment stepper + Note/Recenter pair
   const controls = document.createElement('div')
   controls.className = 'mc-controls'
   controls.dataset.mcInteractive = 'true'
 
+  // 3-segment changed-screens control: Previous (←) | List (↓) | Next (→)
+  const changedGroup = document.createElement('div')
+  changedGroup.className = 'mc-control-group mc-changed-group'
+  changedGroup.hidden = true
+
+  const prevChangedBtn = document.createElement('button')
+  prevChangedBtn.type = 'button'
+  prevChangedBtn.className = 'mc-seg-btn mc-seg-icon mc-changed-prev'
+  prevChangedBtn.setAttribute('aria-label', 'Previous changed screen (←)')
+  prevChangedBtn.title = 'Previous changed screen (←)'
+  prevChangedBtn.innerHTML = PREV_ICON_SVG
+
+  const listChangedBtn = document.createElement('button')
+  listChangedBtn.type = 'button'
+  listChangedBtn.className = 'mc-seg-btn mc-changed-list-btn'
+  listChangedBtn.setAttribute('aria-haspopup', 'listbox')
+  listChangedBtn.setAttribute('aria-expanded', 'false')
+  listChangedBtn.setAttribute('aria-label', 'Changed screens (↓)')
+  listChangedBtn.title = 'Changed screens (↓)'
+
+  const changedDot = document.createElement('span')
+  changedDot.className = 'mc-changed-dot'
+  changedDot.setAttribute('aria-hidden', 'true')
+  const changedCountLabel = document.createElement('span')
+  changedCountLabel.className = 'mc-changed-count'
+  listChangedBtn.append(changedDot, changedCountLabel)
+
+  const nextChangedBtn = document.createElement('button')
+  nextChangedBtn.type = 'button'
+  nextChangedBtn.className = 'mc-seg-btn mc-seg-icon mc-changed-next'
+  nextChangedBtn.setAttribute('aria-label', 'Next changed screen (→)')
+  nextChangedBtn.title = 'Next changed screen (→)'
+  nextChangedBtn.innerHTML = NEXT_ICON_SVG
+
+  const changedMenu = document.createElement('div')
+  changedMenu.className = 'mc-changed-menu'
+  changedMenu.setAttribute('role', 'listbox')
+  changedMenu.setAttribute('aria-label', 'Changed screens')
+  changedMenu.hidden = true
+
+  changedGroup.append(prevChangedBtn, listChangedBtn, nextChangedBtn, changedMenu)
+
+  // Utility icon pair: Note mode + Recenter
+  const toolsGroup = document.createElement('div')
+  toolsGroup.className = 'mc-control-group'
+
   const noteModeBtn = document.createElement('button')
   noteModeBtn.type = 'button'
-  noteModeBtn.className = 'mc-icon-btn mc-note-toggle'
+  noteModeBtn.className = 'mc-seg-btn mc-seg-icon mc-note-toggle'
   noteModeBtn.setAttribute('aria-label', 'Note mode (N)')
   noteModeBtn.setAttribute('aria-pressed', 'false')
   noteModeBtn.title = 'Note mode (N)'
@@ -191,13 +245,14 @@ export function mountMockupCanvas(
 
   const recenterBtn = document.createElement('button')
   recenterBtn.type = 'button'
-  recenterBtn.className = 'mc-icon-btn mc-recenter'
+  recenterBtn.className = 'mc-seg-btn mc-seg-icon mc-recenter'
   recenterBtn.setAttribute('aria-label', 'Recenter')
   recenterBtn.title = 'Recenter'
   recenterBtn.innerHTML = RECENTER_ICON_SVG
   recenterBtn.addEventListener('click', () => recenter(true))
 
-  controls.append(noteModeBtn, recenterBtn)
+  toolsGroup.append(noteModeBtn, recenterBtn)
+  controls.append(changedGroup, toolsGroup)
   root.appendChild(controls)
 
   // Floating screen-space note input (just the input + bottom-right enter icon)
@@ -244,6 +299,7 @@ export function mountMockupCanvas(
   let noteMode = false
   let notes: CanvasNote[] = []
   let dynamicChangedMockups = new Set<string>()
+  let focusedChangedId: string | null = null
   let activePopover: ActivePopover | null = null
   let hoveredMockupId: string | null = null
   let dragState: { pointerId: number; lastX: number; lastY: number } | null = null
@@ -436,6 +492,126 @@ export function mountMockupCanvas(
     }
   }
 
+  interface ChangedScreenEntry {
+    pageId: string
+    pageTitle: string
+    mockupId: string
+    mockupTitle: string
+  }
+
+  function getChangedScreens(): ChangedScreenEntry[] {
+    const out: ChangedScreenEntry[] = []
+    for (const page of pages) {
+      for (const group of page.groups) {
+        for (const item of group.items) {
+          if (item.changed || dynamicChangedMockups.has(item.id)) {
+            out.push({
+              pageId: page.id,
+              pageTitle: page.title,
+              mockupId: item.id,
+              mockupTitle: item.title,
+            })
+          }
+        }
+      }
+    }
+    return out
+  }
+
+  function setChangedMenuOpen(open: boolean): void {
+    changedMenu.hidden = !open
+    listChangedBtn.setAttribute('aria-expanded', String(open))
+  }
+
+  function renderChangedControls(): void {
+    const list = getChangedScreens()
+    if (list.length === 0) {
+      changedGroup.hidden = true
+      setChangedMenuOpen(false)
+      focusedChangedId = null
+      return
+    }
+
+    changedGroup.hidden = false
+    const activeIndex = focusedChangedId
+      ? list.findIndex((entry) => entry.mockupId === focusedChangedId)
+      : -1
+    changedCountLabel.textContent =
+      activeIndex >= 0 ? `${activeIndex + 1}/${list.length}` : String(list.length)
+
+    const showPageLabel = pages.length > 1
+    changedMenu.replaceChildren()
+
+    for (const entry of list) {
+      const row = document.createElement('button')
+      row.type = 'button'
+      row.className = 'mc-changed-row'
+      row.setAttribute('role', 'option')
+      row.dataset.mcChangedTarget = entry.mockupId
+      if (entry.mockupId === focusedChangedId) {
+        row.setAttribute('aria-current', 'true')
+        row.setAttribute('aria-selected', 'true')
+      } else {
+        row.setAttribute('aria-selected', 'false')
+      }
+
+      const main = document.createElement('span')
+      main.className = 'mc-changed-row-main'
+
+      const idPill = document.createElement('span')
+      idPill.className = 'mc-changed-row-id'
+      idPill.textContent = entry.mockupId
+
+      const title = document.createElement('span')
+      title.className = 'mc-changed-row-title'
+      title.textContent = entry.mockupTitle
+
+      main.append(idPill, title)
+      row.appendChild(main)
+
+      if (showPageLabel) {
+        const pageTag = document.createElement('span')
+        pageTag.className = 'mc-changed-row-page'
+        pageTag.textContent = entry.pageTitle
+        row.appendChild(pageTag)
+      }
+
+      row.addEventListener('click', () => {
+        setChangedMenuOpen(false)
+        focusedChangedId = entry.mockupId
+        goTo({ pageId: entry.pageId, mockupId: entry.mockupId, animate: true })
+        renderChangedControls()
+      })
+      changedMenu.appendChild(row)
+    }
+  }
+
+  function stepChanged(delta: -1 | 1): void {
+    const list = getChangedScreens()
+    if (list.length === 0) return
+    const currentIndex = focusedChangedId
+      ? list.findIndex((entry) => entry.mockupId === focusedChangedId)
+      : -1
+    const nextIndex =
+      currentIndex === -1
+        ? delta > 0
+          ? 0
+          : list.length - 1
+        : (currentIndex + delta + list.length) % list.length
+    const target = list[nextIndex]!
+    setChangedMenuOpen(false)
+    focusedChangedId = target.mockupId
+    goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true })
+    renderChangedControls()
+  }
+
+  prevChangedBtn.addEventListener('click', () => stepChanged(-1))
+  nextChangedBtn.addEventListener('click', () => stepChanged(1))
+  listChangedBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    setChangedMenuOpen(changedMenu.hidden)
+  })
+
   function renderChangedStates(): void {
     for (const [id, entry] of mockupElements) {
       const changed = entry.configChanged || dynamicChangedMockups.has(id)
@@ -449,6 +625,7 @@ export function mountMockupCanvas(
         entry.idLink.removeAttribute('aria-label')
       }
     }
+    renderChangedControls()
   }
 
   function renderNotePins(): void {
@@ -706,6 +883,8 @@ export function mountMockupCanvas(
     const { width, height } = getSize()
     const target = computeFitViewport(activeLayout.bounds, width, height)
     animateTo(target, animate)
+    focusedChangedId = null
+    renderChangedControls()
     if (activePage) {
       syncUrl(activePage.id, null)
     }
@@ -929,6 +1108,10 @@ export function mountMockupCanvas(
         closePopover()
         return
       }
+      if (!changedMenu.hidden) {
+        setChangedMenuOpen(false)
+        return
+      }
       if (!dropdownMenu.hidden) {
         setDropdownOpen(false)
         return
@@ -941,10 +1124,27 @@ export function mountMockupCanvas(
 
     if (isTypingTarget(e.target)) return
 
-    if ((e.key === 'n' || e.key === 'N') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.repeat) {
-      e.preventDefault()
-      setNoteMode(!noteMode)
-      return
+    if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+      if (e.key === 'ArrowLeft' && !changedGroup.hidden) {
+        e.preventDefault()
+        stepChanged(-1)
+        return
+      }
+      if (e.key === 'ArrowRight' && !changedGroup.hidden) {
+        e.preventDefault()
+        stepChanged(1)
+        return
+      }
+      if (e.key === 'ArrowDown' && !changedGroup.hidden) {
+        e.preventDefault()
+        setChangedMenuOpen(changedMenu.hidden)
+        return
+      }
+      if ((e.key === 'n' || e.key === 'N') && !e.repeat) {
+        e.preventDefault()
+        setNoteMode(!noteMode)
+        return
+      }
     }
 
     if (e.code === 'Space' && !e.repeat) {
@@ -964,6 +1164,9 @@ export function mountMockupCanvas(
   const onDocumentPointerDown = (e: PointerEvent) => {
     if (!dropdownMenu.hidden && e.target instanceof Node && !dropdown.contains(e.target)) {
       setDropdownOpen(false)
+    }
+    if (!changedMenu.hidden && e.target instanceof Node && !changedGroup.contains(e.target)) {
+      setChangedMenuOpen(false)
     }
     if (
       !popoverEl.hidden &&

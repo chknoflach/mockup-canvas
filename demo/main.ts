@@ -25,7 +25,7 @@ if (stateParam) {
             title: 'Payment states',
             items: [
               { id: 'B.1', title: 'Card form', width: 520, height: 500, src: '?state=card-form' },
-              { id: 'B.2', title: 'Failed notice', width: 520, height: 420, src: '?state=failed-notice' },
+              { id: 'B.2', title: 'Failed notice', width: 520, height: 420, src: '?state=failed-notice', changed: true },
             ],
           },
         ],
