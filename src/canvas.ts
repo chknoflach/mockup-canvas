@@ -778,7 +778,6 @@ export function mountMockupCanvas(
     }
     const target = findSpatialNeighbor(activeLayout, originId, direction)
     if (!target) return
-    focusedMockupId = target.item.id
     goTo({ pageId: activePage.id, mockupId: target.item.id, animate: true, zoom: 'smart' })
   }
 

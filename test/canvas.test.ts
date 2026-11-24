@@ -346,9 +346,21 @@ describe('mountMockupCanvas', () => {
       expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
       expect(handle.getViewport().scale).toBeLessThan(a2FillScale)
 
+      // Stepping Down from A.1 to B.1 brings B.1 up to A.1's exact top-edge rail (never leaving B.1 low)
+      const a1El = container.querySelector<HTMLElement>('[data-mc-mockup-id="A.1"]')!
+      const b1El = container.querySelector<HTMLElement>('[data-mc-mockup-id="B.1"]')!
+      const a1TopWorld = parseFloat(a1El.style.top)
+      const b1TopWorld = parseFloat(b1El.style.top)
+      const vpAtA1 = handle.getViewport()
+      const a1TopOnScreen = vpAtA1.ty + a1TopWorld * vpAtA1.scale
+
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
       vi.advanceTimersByTime(300)
       expect(new URLSearchParams(window.location.search).get('mockup')).toBe('B.1')
+      const vpAtB1 = handle.getViewport()
+      const b1TopOnScreen = vpAtB1.ty + b1TopWorld * vpAtB1.scale
+      expect(b1TopOnScreen).toBeCloseTo(a1TopOnScreen, 1)
+
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }))
       vi.advanceTimersByTime(300)
       expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
