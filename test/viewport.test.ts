@@ -68,7 +68,7 @@ describe('viewport math', () => {
     const result = computePanToTarget(tallTarget, 1, 1200, 700)
     expect(result.scale).toBe(1)
     const topOnScreen = result.ty + tallTarget.y * result.scale
-    expect(topOnScreen).toBeGreaterThanOrEqual(76)
+    expect(topOnScreen).toBe(72)
   })
 
   it('matches fit and fill-width when width is tightest, and toggles fit-height vs fill-width for tall portraits', () => {
@@ -85,19 +85,21 @@ describe('viewport math', () => {
     const phoneFill = computeFillMockup(tallPhone, 800, 980)
     expect(phoneFit.scale).toBeLessThan(phoneFill.scale)
     expect(phoneFit.ty + tallPhone.height * phoneFit.scale).toBeLessThanOrEqual(980 - 15)
-    expect(phoneFill.ty).toBe(64)
+    expect(phoneFill.ty).toBe(72)
   })
 
-  it('preserves zoom during smart navigation when target fits width, and zooms to fill-width when it overflows', () => {
+  it('preserves zoom and top-edge rail across screens of different heights', () => {
     const mobile = { x: 0, y: 0, width: 390, height: 674 }
     const desktop = { x: 500, y: 0, width: 900, height: 594 }
 
-    // Stepping from desktop (0.8x) to mobile (390w fits easily in 800px): preserves 0.8x
-    const toMobile = computeNavigateToMockup(mobile, 0.8, 800, 980)
+    // Stepping from desktop (0.8x, top edge at 130px) to mobile keeps 0.8x AND keeps top edge at 130px
+    const toMobile = computeNavigateToMockup(mobile, 0.8, 800, 980, undefined, 130)
     expect(toMobile.scale).toBeCloseTo(0.8, 6)
+    expect(toMobile.ty + mobile.y * toMobile.scale).toBeCloseTo(130, 4)
 
     // Stepping from zoomed-in mobile (1.8x) to desktop (900w * 1.8 = 1620 > 768): shrinks to fill-width
-    const toDesktop = computeNavigateToMockup(desktop, 1.8, 800, 980)
+    const toDesktop = computeNavigateToMockup(desktop, 1.8, 800, 980, undefined, 130)
     expect(toDesktop.scale).toBeCloseTo((800 - 32) / 900, 4)
+    expect(toDesktop.ty + desktop.y * toDesktop.scale).toBeCloseTo(130, 4)
   })
 })

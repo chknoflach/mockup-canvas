@@ -62,9 +62,22 @@ export function computeFitViewport(
 }
 
 const MOCKUP_EDGE_PADDING = 16
-const MOCKUP_TOP_PADDING = 64
+const MOCKUP_TOP_PADDING = 72
 
-/** Zoom and center a single mockup so the full element is visible with minimal edge margin. */
+function resolveTopY(
+  scaledH: number,
+  viewportHeight: number,
+  edgePadding: number,
+  anchorTopY?: number,
+): number {
+  const maxTopY = Math.max(MOCKUP_TOP_PADDING, viewportHeight - scaledH - edgePadding)
+  if (anchorTopY === undefined || !Number.isFinite(anchorTopY)) {
+    return MOCKUP_TOP_PADDING
+  }
+  return Math.max(MOCKUP_TOP_PADDING, Math.min(anchorTopY, maxTopY))
+}
+
+/** Zoom a single mockup so the full element is visible, aligned to the consistent top rail. */
 export function computeFitMockup(
   target: Rect,
   viewportWidth: number,
@@ -79,37 +92,33 @@ export function computeFitMockup(
 
   const scale = clampScale(Math.min(availW / target.width, availH / target.height))
   const scaledW = target.width * scale
-  const scaledH = target.height * scale
 
   return {
     scale,
     tx: (viewportWidth - scaledW) / 2 - target.x * scale,
-    ty: MOCKUP_TOP_PADDING + (availH - scaledH) / 2 - target.y * scale,
+    ty: MOCKUP_TOP_PADDING - target.y * scale,
   }
 }
 
-/** Zoom a single mockup to fill width cleanly (top-aligned when taller than the viewport). */
+/** Zoom a single mockup to fill width cleanly, aligned to the consistent top rail. */
 export function computeFillMockup(
   target: Rect,
   viewportWidth: number,
   viewportHeight: number,
   edgePadding = MOCKUP_EDGE_PADDING,
+  anchorTopY?: number,
 ): Viewport {
   if (target.width <= 0 || target.height <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
     return { tx: edgePadding, ty: MOCKUP_TOP_PADDING, scale: 1 }
   }
   const availW = Math.max(1, viewportWidth - edgePadding * 2)
-  const availH = Math.max(1, viewportHeight - MOCKUP_TOP_PADDING - edgePadding)
 
   const scale = clampScale(availW / target.width)
   const scaledW = target.width * scale
   const scaledH = target.height * scale
 
   const tx = (viewportWidth - scaledW) / 2 - target.x * scale
-  const ty =
-    scaledH <= availH
-      ? MOCKUP_TOP_PADDING + (availH - scaledH) / 2 - target.y * scale
-      : MOCKUP_TOP_PADDING - target.y * scale
+  const ty = resolveTopY(scaledH, viewportHeight, edgePadding, anchorTopY) - target.y * scale
 
   return { scale, tx, ty }
 }
@@ -117,6 +126,7 @@ export function computeFillMockup(
 /**
  * Navigate to a target mockup while preserving current zoom whenever the target fits horizontally;
  * if the target is wider than the viewport at the current zoom, zooms out to fill-width so nothing clips left/right.
+ * Preserves the top-edge rail rather than vertically re-centering screens of different heights.
  */
 export function computeNavigateToMockup(
   target: Rect,
@@ -124,46 +134,41 @@ export function computeNavigateToMockup(
   viewportWidth: number,
   viewportHeight: number,
   edgePadding = MOCKUP_EDGE_PADDING,
+  anchorTopY?: number,
 ): Viewport {
   const safeScale = clampScale(currentScale)
   if (target.width <= 0 || target.height <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
-    return computePanToTarget(target, safeScale, viewportWidth, viewportHeight)
+    return computePanToTarget(target, safeScale, viewportWidth, viewportHeight, anchorTopY)
   }
   const availW = Math.max(1, viewportWidth - edgePadding * 2)
   if (target.width * safeScale > availW) {
-    return computeFillMockup(target, viewportWidth, viewportHeight, edgePadding)
+    return computeFillMockup(target, viewportWidth, viewportHeight, edgePadding, anchorTopY)
   }
-  return computePanToTarget(target, safeScale, viewportWidth, viewportHeight)
+  return computePanToTarget(target, safeScale, viewportWidth, viewportHeight, anchorTopY)
 }
 
 /**
- * Pan ONLY (never changes scale) to bring a target mockup into view.
- * Horizontally centers the mockup; vertically centers it unless the mockup is taller
- * than the available viewport at the current zoom, in which case its top header stays visible.
+ * Pan ONLY (never changes scale) to bring a target mockup into view, keeping a consistent top-edge rail.
  */
 export function computePanToTarget(
   target: Rect,
   currentScale: number,
   viewportWidth: number,
   viewportHeight: number,
+  anchorTopY?: number,
 ): Viewport {
   const scale = clampScale(currentScale)
   const centerX = target.x + target.width / 2
   const centerY = target.y + target.height / 2
 
-  const tx = viewportWidth / 2 - centerX * scale
-
-  const scaledH = target.height * scale
-  const availH = Math.max(1, viewportHeight - TOP_CHROME_CLEARANCE - 32)
-  const ty =
-    scaledH <= availH
-      ? TOP_CHROME_CLEARANCE + (availH - scaledH) / 2 - target.y * scale
-      : TOP_CHROME_CLEARANCE - target.y * scale
-
-  // Guard against degenerate viewports.
   if (viewportWidth <= 0 || viewportHeight <= 0) {
     return { tx: -centerX * scale, ty: -centerY * scale, scale }
   }
+
+  const tx = viewportWidth / 2 - centerX * scale
+  const scaledH = target.height * scale
+  const topY = resolveTopY(scaledH, viewportHeight, MOCKUP_EDGE_PADDING, anchorTopY)
+  const ty = topY - target.y * scale
 
   return { tx, ty, scale }
 }

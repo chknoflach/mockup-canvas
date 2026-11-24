@@ -1086,6 +1086,16 @@ export function mountMockupCanvas(
     )
     if (!resolved.page) return
 
+    // Capture the current mockup's top-edge position on screen before switching so navigation
+    // keeps the top edge steady instead of vertically jumping between screens of different heights.
+    let anchorTopY: number | undefined
+    if (activeLayout && focusedMockupId) {
+      const prev = activeLayout.byId.get(focusedMockupId)
+      if (prev) {
+        anchorTopY = viewport.ty + prev.rect.y * viewport.scale
+      }
+    }
+
     const pageChanged = activePage?.id !== resolved.page.id
     if (pageChanged) {
       focusedMockupId = null
@@ -1103,12 +1113,12 @@ export function mountMockupCanvas(
         const mode = options.zoom ?? 'pan'
         const targetViewport =
           mode === 'smart'
-            ? computeNavigateToMockup(targetItem.rect, viewport.scale, width, height)
+            ? computeNavigateToMockup(targetItem.rect, viewport.scale, width, height, undefined, anchorTopY)
             : mode === 'fill'
-              ? computeFillMockup(targetItem.rect, width, height)
+              ? computeFillMockup(targetItem.rect, width, height, undefined, anchorTopY)
               : mode === 'fit'
                 ? computeFitMockup(targetItem.rect, width, height)
-                : computePanToTarget(targetItem.rect, viewport.scale, width, height)
+                : computePanToTarget(targetItem.rect, viewport.scale, width, height, anchorTopY)
         animateTo(targetViewport, options.animate ?? !pageChanged)
         syncUrl(resolved.page.id, resolved.mockupId)
         return
