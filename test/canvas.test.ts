@@ -223,9 +223,10 @@ describe('mountMockupCanvas', () => {
 
     const popover = container.querySelector<HTMLElement>('.mc-note-popover')!
     expect(popover.hidden).toBe(false)
-    expect(container.querySelector('.mc-note-popover-letter')?.textContent).toBe('A')
+    expect(container.querySelector('[data-mc-note-draft="true"]')?.textContent).toBe('A')
 
     const input = container.querySelector<HTMLTextAreaElement>('.mc-note-input')!
+    expect(document.activeElement).toBe(input)
     input.value = 'Tighten spacing here'
     container.querySelector<HTMLButtonElement>('.mc-note-submit')!.click()
 
@@ -239,7 +240,8 @@ describe('mountMockupCanvas', () => {
 
     // Second note gets letter (B) and allows empty optional note
     shield.dispatchEvent(new MouseEvent('pointerdown', { button: 0, clientX: 200, clientY: 180, bubbles: true }))
-    expect(container.querySelector('.mc-note-popover-letter')?.textContent).toBe('B')
+    expect(container.querySelector('[data-mc-note-draft="true"]')?.textContent).toBe('B')
+    expect(document.activeElement).toBe(input)
     container.querySelector<HTMLButtonElement>('.mc-note-submit')!.click()
     expect(handle.getNotes().map((n) => n.letter)).toEqual(['A', 'B'])
 

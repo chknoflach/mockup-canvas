@@ -78,12 +78,6 @@ interface ActivePopover {
   element: NoteElementInfo
 }
 
-function summarizeTarget(mockupId: string, element: NoteElementInfo): string {
-  if (element.text) return `${mockupId} · ${element.tag} "${element.text}"`
-  if (element.ariaLabel) return `${mockupId} · ${element.tag} (${element.ariaLabel})`
-  return `${mockupId} · ${element.selector}`
-}
-
 export function mountMockupCanvas(
   container: HTMLElement,
   config: MockupCanvasConfig,
@@ -206,37 +200,23 @@ export function mountMockupCanvas(
   controls.append(noteModeBtn, recenterBtn)
   root.appendChild(controls)
 
-  // Floating screen-space note input popover
+  // Floating screen-space note input (just the input + bottom-right enter icon)
   const popoverEl = document.createElement('div')
   popoverEl.className = 'mc-note-popover'
   popoverEl.dataset.mcInteractive = 'true'
   popoverEl.hidden = true
 
-  const popoverHead = document.createElement('div')
-  popoverHead.className = 'mc-note-popover-head'
-
-  const popoverRef = document.createElement('div')
-  popoverRef.className = 'mc-note-popover-ref'
-  const popoverLetter = document.createElement('span')
-  popoverLetter.className = 'mc-note-popover-letter'
-  const popoverTarget = document.createElement('span')
-  popoverTarget.className = 'mc-note-popover-target'
-  popoverRef.append(popoverLetter, popoverTarget)
+  const popoverTextarea = document.createElement('textarea')
+  popoverTextarea.className = 'mc-note-input'
+  popoverTextarea.placeholder = 'Note (optional)…'
+  popoverTextarea.rows = 3
 
   const popoverDeleteBtn = document.createElement('button')
   popoverDeleteBtn.type = 'button'
   popoverDeleteBtn.className = 'mc-note-delete'
-  popoverDeleteBtn.textContent = 'Remove'
-
-  popoverHead.append(popoverRef, popoverDeleteBtn)
-
-  const popoverInputWrap = document.createElement('div')
-  popoverInputWrap.className = 'mc-note-input-wrap'
-
-  const popoverTextarea = document.createElement('textarea')
-  popoverTextarea.className = 'mc-note-input'
-  popoverTextarea.placeholder = 'Add a note (optional)…'
-  popoverTextarea.rows = 3
+  popoverDeleteBtn.setAttribute('aria-label', 'Remove note')
+  popoverDeleteBtn.title = 'Remove note'
+  popoverDeleteBtn.textContent = '×'
 
   const popoverSubmitBtn = document.createElement('button')
   popoverSubmitBtn.type = 'button'
@@ -245,8 +225,7 @@ export function mountMockupCanvas(
   popoverSubmitBtn.title = 'Save note (Enter)'
   popoverSubmitBtn.innerHTML = ENTER_ICON_SVG
 
-  popoverInputWrap.append(popoverTextarea, popoverSubmitBtn)
-  popoverEl.append(popoverHead, popoverInputWrap)
+  popoverEl.append(popoverTextarea, popoverDeleteBtn, popoverSubmitBtn)
   root.appendChild(popoverEl)
 
   shell.appendChild(root)
@@ -385,15 +364,18 @@ export function mountMockupCanvas(
 
   function openPopover(pop: ActivePopover, initialText: string): void {
     activePopover = pop
-    popoverLetter.textContent = pop.letter
-    popoverTarget.textContent = summarizeTarget(pop.mockupId, pop.element)
-    popoverTarget.title = popoverTarget.textContent
     popoverTextarea.value = initialText
     popoverDeleteBtn.hidden = pop.isNew
     popoverEl.hidden = false
     renderNotePins()
     positionPopover()
-    popoverTextarea.focus()
+    popoverTextarea.focus({ preventScroll: true })
+    popoverTextarea.setSelectionRange(initialText.length, initialText.length)
+    queueMicrotask(() => {
+      if (activePopover === pop && !popoverEl.hidden) {
+        popoverTextarea.focus({ preventScroll: true })
+      }
+    })
   }
 
   function submitPopover(): void {
@@ -790,6 +772,7 @@ export function mountMockupCanvas(
     if (noteMode && e.button === 0 && !spaceHeld && activePage) {
       const hit = findMockupEntryFromTarget(e.target)
       if (hit) {
+        e.preventDefault()
         e.stopPropagation()
         const [mockupId, entry] = hit
         const inspected = inspectMockupElement({
