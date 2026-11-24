@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MOCKUP_HEADER_HEIGHT, computePageLayout } from '../src/layout'
+import { MOCKUP_HEADER_HEIGHT, computePageLayout, findSpatialNeighbor } from '../src/layout'
 import type { CanvasPage } from '../src/types'
 
 describe('layout', () => {
@@ -58,5 +58,40 @@ describe('layout', () => {
 
     expect(a3.rect.x).toBe(a1.rect.x)
     expect(a3.rect.y).toBeGreaterThan(a1.rect.y + a1.rect.height)
+  })
+
+  it('finds visual neighbors in all 4 directions with edge wrap-around', () => {
+    const page: CanvasPage = {
+      id: 'checkout',
+      title: 'Checkout',
+      groups: [
+        {
+          title: 'Top',
+          items: [
+            { id: 'A.1', title: 'Desktop', width: 900, height: 500 },
+            { id: 'A.2', title: 'Mobile', width: 390, height: 580 },
+          ],
+        },
+        {
+          title: 'Bottom',
+          items: [
+            { id: 'B.1', title: 'Card', width: 520, height: 420 },
+            { id: 'B.2', title: 'Failed', width: 520, height: 420 },
+          ],
+        },
+      ],
+    }
+
+    const layout = computePageLayout(page)
+    // Sideways + wrap
+    expect(findSpatialNeighbor(layout, 'A.1', 'right')?.item.id).toBe('A.2')
+    expect(findSpatialNeighbor(layout, 'A.2', 'right')?.item.id).toBe('A.1')
+    expect(findSpatialNeighbor(layout, 'A.1', 'left')?.item.id).toBe('A.2')
+    // Vertical + wrap
+    expect(findSpatialNeighbor(layout, 'A.1', 'down')?.item.id).toBe('B.1')
+    expect(findSpatialNeighbor(layout, 'B.1', 'down')?.item.id).toBe('A.1')
+    expect(findSpatialNeighbor(layout, 'A.1', 'up')?.item.id).toBe('B.1')
+    expect(findSpatialNeighbor(layout, 'A.2', 'down')?.item.id).toBe('B.2')
+    expect(findSpatialNeighbor(layout, 'B.2', 'up')?.item.id).toBe('A.2')
   })
 })

@@ -335,16 +335,15 @@
 }
 
 .mc-changed-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 999px;
   background: var(--mc-changed-bg);
   flex-shrink: 0;
 }
 
-.mc-changed-count {
-  color: var(--mc-text);
-  white-space: nowrap;
+.mc-seg-btn[aria-pressed='true'] .mc-changed-mode-icon {
+  color: var(--mc-active-fg);
 }
 
 .mc-changed-menu {

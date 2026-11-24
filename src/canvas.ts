@@ -1,4 +1,9 @@
-import { computePageLayout, type PageLayout } from './layout'
+import {
+  computePageLayout,
+  findSpatialNeighbor,
+  type PageLayout,
+  type SpatialDirection,
+} from './layout'
 import { createStateStore, inspectMockupElement, nextNoteLetter } from './notes'
 import type {
   CanvasNote,
@@ -54,6 +59,11 @@ const PREV_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 16 16" fill="non
 
 const NEXT_ICON_SVG = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
   <path d="M6 3.5 10.5 8 6 12.5" />
+</svg>`
+
+const CHANGES_MODE_ICON_SVG = `<svg class="mc-changed-mode-icon" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M8 2.5v3M8 10.5v3M2.5 8h3M10.5 8h3" />
+  <circle cx="8" cy="8" r="2" />
 </svg>`
 
 const ANIMATION_MS = 220
@@ -188,10 +198,18 @@ export function mountMockupCanvas(
   controls.className = 'mc-controls'
   controls.dataset.mcInteractive = 'true'
 
-  // 3-segment changed-screens control: Previous (←) | List (↓) | Next (→)
+  // 4-segment changed-screens control: Mode toggle (C) | Previous (←) | Dot list (↓) | Next (→)
   const changedGroup = document.createElement('div')
   changedGroup.className = 'mc-control-group mc-changed-group'
   changedGroup.hidden = true
+
+  const changesModeBtn = document.createElement('button')
+  changesModeBtn.type = 'button'
+  changesModeBtn.className = 'mc-seg-btn mc-seg-icon mc-changes-toggle'
+  changesModeBtn.setAttribute('aria-label', 'Changes mode (C)')
+  changesModeBtn.setAttribute('aria-pressed', 'false')
+  changesModeBtn.title = 'Changes mode (C)'
+  changesModeBtn.innerHTML = CHANGES_MODE_ICON_SVG
 
   const prevChangedBtn = document.createElement('button')
   prevChangedBtn.type = 'button'
@@ -202,7 +220,7 @@ export function mountMockupCanvas(
 
   const listChangedBtn = document.createElement('button')
   listChangedBtn.type = 'button'
-  listChangedBtn.className = 'mc-seg-btn mc-changed-list-btn'
+  listChangedBtn.className = 'mc-seg-btn mc-seg-icon mc-changed-list-btn'
   listChangedBtn.setAttribute('aria-haspopup', 'listbox')
   listChangedBtn.setAttribute('aria-expanded', 'false')
   listChangedBtn.setAttribute('aria-label', 'Changed screens (↓)')
@@ -211,9 +229,7 @@ export function mountMockupCanvas(
   const changedDot = document.createElement('span')
   changedDot.className = 'mc-changed-dot'
   changedDot.setAttribute('aria-hidden', 'true')
-  const changedCountLabel = document.createElement('span')
-  changedCountLabel.className = 'mc-changed-count'
-  listChangedBtn.append(changedDot, changedCountLabel)
+  listChangedBtn.append(changedDot)
 
   const nextChangedBtn = document.createElement('button')
   nextChangedBtn.type = 'button'
@@ -228,7 +244,7 @@ export function mountMockupCanvas(
   changedMenu.setAttribute('aria-label', 'Changed screens')
   changedMenu.hidden = true
 
-  changedGroup.append(prevChangedBtn, listChangedBtn, nextChangedBtn, changedMenu)
+  changedGroup.append(changesModeBtn, prevChangedBtn, listChangedBtn, nextChangedBtn, changedMenu)
 
   // Utility icon pair: Note mode + Recenter
   const toolsGroup = document.createElement('div')
@@ -297,8 +313,10 @@ export function mountMockupCanvas(
   let animRaf: number | null = null
   let spaceHeld = false
   let noteMode = false
+  let changesMode = false
   let notes: CanvasNote[] = []
   let dynamicChangedMockups = new Set<string>()
+  let focusedMockupId: string | null = null
   let focusedChangedId: string | null = null
   let highlightedChangedIndex = 0
   let activePopover: ActivePopover | null = null
@@ -568,22 +586,26 @@ export function mountMockupCanvas(
     renderChangedControls()
   }
 
+  function setChangesMode(enabled: boolean): void {
+    const hasChanges = getChangedScreens().length > 0
+    changesMode = enabled && hasChanges
+    root.dataset.mcChangesMode = changesMode ? 'true' : 'false'
+    changesModeBtn.setAttribute('aria-pressed', String(changesMode))
+    if (!changesMode) {
+      setChangedMenuOpen(false)
+    }
+  }
+
   function renderChangedControls(): void {
     const list = getChangedScreens()
     if (list.length === 0) {
       changedGroup.hidden = true
-      setChangedMenuOpen(false)
+      setChangesMode(false)
       focusedChangedId = null
       return
     }
 
     changedGroup.hidden = false
-    const activeIndex = focusedChangedId
-      ? list.findIndex((entry) => entry.mockupId === focusedChangedId)
-      : -1
-    changedCountLabel.textContent =
-      activeIndex >= 0 ? `${activeIndex + 1}/${list.length}` : String(list.length)
-
     const showPageLabel = pages.length > 1
     changedMenu.replaceChildren()
 
@@ -640,6 +662,9 @@ export function mountMockupCanvas(
   function stepChanged(delta: -1 | 1): void {
     const list = getChangedScreens()
     if (list.length === 0) return
+    if (!changesMode) {
+      setChangesMode(true)
+    }
     const currentIndex = focusedChangedId
       ? list.findIndex((entry) => entry.mockupId === focusedChangedId)
       : -1
@@ -656,11 +681,43 @@ export function mountMockupCanvas(
     renderChangedControls()
   }
 
+  function navigateSpatial(direction: SpatialDirection): void {
+    if (!activePage || !activeLayout) return
+    let originId = focusedMockupId
+    if (!originId) {
+      // If user panned manually onto a specific mockup, move spatially from that one.
+      const { width, height } = getSize()
+      const worldCenterX = (width / 2 - viewport.tx) / viewport.scale
+      const worldCenterY = (height / 2 - viewport.ty) / viewport.scale
+      for (const pos of activeLayout.byId.values()) {
+        const r = pos.rect
+        if (
+          worldCenterX >= r.x &&
+          worldCenterX <= r.x + r.width &&
+          worldCenterY >= r.y &&
+          worldCenterY <= r.y + r.height
+        ) {
+          originId = pos.item.id
+          break
+        }
+      }
+    }
+    const target = findSpatialNeighbor(activeLayout, originId, direction)
+    if (!target) return
+    focusedMockupId = target.item.id
+    goTo({ pageId: activePage.id, mockupId: target.item.id, animate: true })
+  }
+
+  changesModeBtn.addEventListener('click', () => setChangesMode(!changesMode))
   prevChangedBtn.addEventListener('click', () => stepChanged(-1))
   nextChangedBtn.addEventListener('click', () => stepChanged(1))
   listChangedBtn.addEventListener('click', (e) => {
     e.stopPropagation()
-    setChangedMenuOpen(changedMenu.hidden)
+    const nextOpen = changedMenu.hidden
+    if (nextOpen && !changesMode) {
+      setChangesMode(true)
+    }
+    setChangedMenuOpen(nextOpen)
   })
 
   function renderChangedStates(): void {
@@ -934,6 +991,7 @@ export function mountMockupCanvas(
     const { width, height } = getSize()
     const target = computeFitViewport(activeLayout.bounds, width, height)
     animateTo(target, animate)
+    focusedMockupId = null
     focusedChangedId = null
     renderChangedControls()
     if (activePage) {
@@ -951,6 +1009,7 @@ export function mountMockupCanvas(
 
     const pageChanged = activePage?.id !== resolved.page.id
     if (pageChanged) {
+      focusedMockupId = null
       renderPage(resolved.page)
     }
 
@@ -959,6 +1018,7 @@ export function mountMockupCanvas(
     if (resolved.mockupId && activeLayout) {
       const targetItem = activeLayout.byId.get(resolved.mockupId)
       if (targetItem) {
+        focusedMockupId = resolved.mockupId
         // Deep-linking pans ONLY — current zoom scale is strictly preserved.
         const targetViewport = computePanToTarget(targetItem.rect, viewport.scale, width, height)
         animateTo(targetViewport, options.animate ?? !pageChanged)
@@ -1171,6 +1231,10 @@ export function mountMockupCanvas(
         setNoteMode(false)
         return
       }
+      if (changesMode) {
+        setChangesMode(false)
+        return
+      }
     }
 
     if (isTypingTarget(e.target)) return
@@ -1194,25 +1258,55 @@ export function mountMockupCanvas(
         }
       }
 
-      if (e.key === 'ArrowLeft' && !changedGroup.hidden) {
+      if ((e.key === 'c' || e.key === 'C') && !e.repeat && !changedGroup.hidden) {
         e.preventDefault()
-        stepChanged(-1)
+        setChangesMode(!changesMode)
         return
       }
-      if (e.key === 'ArrowRight' && !changedGroup.hidden) {
-        e.preventDefault()
-        stepChanged(1)
-        return
-      }
-      if (e.key === 'ArrowDown' && !changedGroup.hidden) {
-        e.preventDefault()
-        setChangedMenuOpen(true)
-        return
-      }
+
       if ((e.key === 'n' || e.key === 'N') && !e.repeat) {
         e.preventDefault()
         setNoteMode(!noteMode)
         return
+      }
+
+      if (changesMode && !changedGroup.hidden) {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault()
+          stepChanged(-1)
+          return
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault()
+          stepChanged(1)
+          return
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          setChangedMenuOpen(true)
+          return
+        }
+      } else {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault()
+          navigateSpatial('left')
+          return
+        }
+        if (e.key === 'ArrowRight') {
+          e.preventDefault()
+          navigateSpatial('right')
+          return
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          navigateSpatial('up')
+          return
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          navigateSpatial('down')
+          return
+        }
       }
     }
 
@@ -1346,6 +1440,8 @@ export function mountMockupCanvas(
     setMockupMode,
     setNoteMode,
     isNoteMode: () => noteMode,
+    setChangesMode,
+    isChangesMode: () => changesMode,
     setChangedMockups(mockupIds: string[]) {
       dynamicChangedMockups = new Set(mockupIds)
       renderChangedStates()

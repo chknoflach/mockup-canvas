@@ -259,7 +259,7 @@ describe('mountMockupCanvas', () => {
     handle.destroy()
   })
 
-  it('steps through changed screens with the 3-segment control and arrow shortcuts (pan-only)', () => {
+  it('uses arrow keys for spatial mockup navigation by default and switches to changes mode via "c" or toggle', () => {
     const container = document.getElementById('root')!
     const pagesWithChanges: CanvasPage[] = [
       {
@@ -290,78 +290,72 @@ describe('mountMockupCanvas', () => {
 
     const changedGroup = container.querySelector<HTMLElement>('.mc-changed-group')!
     expect(changedGroup.hidden).toBe(false)
-    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('2')
+    expect(handle.isChangesMode()).toBe(false)
+    // Middle segment shows only the dot (no count text)
+    expect(container.querySelector('.mc-changed-list-btn')?.textContent?.trim()).toBe('')
 
-    // Zoom to a custom scale first so we prove stepping pans ONLY without changing zoom
+    // Zoom to a custom scale first so we prove navigation pans ONLY without changing zoom
     const rootEl = container.querySelector('.mc-root')!
     rootEl.dispatchEvent(
       new WheelEvent('wheel', { ctrlKey: true, deltaY: -50, clientX: 500, clientY: 300, cancelable: true }),
     )
     const customScale = handle.getViewport().scale
 
-    // Right arrow -> first changed screen (A.2 on checkout)
+    // Normal mode (changesMode OFF): arrow keys navigate spatially on the current page
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
-    expect(handle.getActivePageId()).toBe('checkout')
-    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('1/2')
+    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('B.1')
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }))
+    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
     expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
 
-    // Right arrow again -> second changed screen (C.1 on passkeys)
+    // Press 'c' to enter Changes mode
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c' }))
+    expect(handle.isChangesMode()).toBe(true)
+
+    // In Changes mode: Right/Left step across changed screens with full wrap-around
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+    expect(handle.getActivePageId()).toBe('checkout')
+    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
+
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
     expect(handle.getActivePageId()).toBe('passkeys')
-    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('2/2')
-    expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
-
-    // Left arrow -> back to A.2 on checkout
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
-    expect(handle.getActivePageId()).toBe('checkout')
-    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('1/2')
-    expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
-
-    // Left arrow wraps from first (1/2) to last (2/2) and Right wraps from last (2/2) back to first (1/2)
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
-    expect(handle.getActivePageId()).toBe('passkeys')
-    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('2/2')
+    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('C.1')
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
     expect(handle.getActivePageId()).toBe('checkout')
-    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('1/2')
-    expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
+    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
 
-    // Down arrow opens the changed list; Up/Down navigate with wrap-around WITHOUT panning; Enter confirms and pans
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+    expect(handle.getActivePageId()).toBe('passkeys')
+    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('C.1')
+
+    // Down arrow opens the changed list; Up/Down navigate with wrap-around WITHOUT panning; Enter confirms
     const menu = container.querySelector<HTMLElement>('.mc-changed-menu')!
-    expect(menu.hidden).toBe(true)
     const beforeMenu = handle.getViewport()
-
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
     expect(menu.hidden).toBe(false)
-    expect(menu.querySelectorAll('.mc-changed-row').length).toBe(2)
-    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('A.2')
-
-    // ArrowUp wraps from first (A.2) to last (C.1) without changing page or viewport
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp' }))
     expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('C.1')
-    expect(handle.getActivePageId()).toBe('checkout')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('A.2')
+    expect(handle.getActivePageId()).toBe('passkeys')
     expect(handle.getViewport()).toEqual(beforeMenu)
 
-    // ArrowDown wraps from last (C.1) back to first (A.2), then ArrowDown moves to C.1
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
-    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('A.2')
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
-    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('C.1')
-
-    // Escape closes without panning
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    expect(menu.hidden).toBe(true)
-    expect(handle.getActivePageId()).toBe('checkout')
-
-    // Re-open, move to C.1, confirm with Enter -> switches page & pans ONLY (scale preserved)
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
     expect(menu.hidden).toBe(true)
-    expect(handle.getActivePageId()).toBe('passkeys')
-    expect(container.querySelector('.mc-changed-count')?.textContent).toBe('2/2')
+    expect(handle.getActivePageId()).toBe('checkout')
+    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
     expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
+
+    // Escape exits changes mode when menu is closed
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    expect(handle.isChangesMode()).toBe(false)
 
     handle.destroy()
   })

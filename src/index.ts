@@ -1,5 +1,11 @@
 export { mountMockupCanvas } from './canvas'
-export { computePageLayout, MOCKUP_HEADER_HEIGHT, GROUP_HEADER_HEIGHT } from './layout'
+export {
+  computePageLayout,
+  findSpatialNeighbor,
+  MOCKUP_HEADER_HEIGHT,
+  GROUP_HEADER_HEIGHT,
+  type SpatialDirection,
+} from './layout'
 export { describeElementSelector, indexToLetter, inspectMockupElement, nextNoteLetter } from './notes'
 export { buildDeepLink, parseDeepLink, resolveTarget } from './url'
 export {

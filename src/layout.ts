@@ -117,3 +117,110 @@ export function computePageLayout(page: CanvasPage): PageLayout {
 
   return { groups, bounds, byId }
 }
+
+export type SpatialDirection = 'left' | 'right' | 'up' | 'down'
+
+function centerOf(rect: Rect): { x: number; y: number } {
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 }
+}
+
+function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: number): boolean {
+  return Math.min(aEnd, bEnd) - Math.max(aStart, bStart) > 0
+}
+
+/**
+ * Find the visually adjacent mockup in the requested direction on the current page.
+ * Prefers mockups aligned on the same row/column and wraps around at edges.
+ */
+export function findSpatialNeighbor(
+  layout: PageLayout,
+  currentId: string | null,
+  direction: SpatialDirection,
+): PositionedMockup | null {
+  const all = Array.from(layout.byId.values())
+  if (all.length === 0) return null
+  if (all.length === 1) return all[0]!
+
+  const current = currentId ? layout.byId.get(currentId) : undefined
+  if (!current) {
+    return direction === 'left' || direction === 'up' ? all[all.length - 1]! : all[0]!
+  }
+
+  const c = centerOf(current.rect)
+  const others = all.filter((m) => m.item.id !== current.item.id)
+  const horizontal = direction === 'left' || direction === 'right'
+
+  const primaryDelta = (other: PositionedMockup): number => {
+    const o = centerOf(other.rect)
+    if (direction === 'right') return o.x - c.x
+    if (direction === 'left') return c.x - o.x
+    if (direction === 'down') return o.y - c.y
+    return c.y - o.y
+  }
+
+  const perpDistance = (other: PositionedMockup): number => {
+    const o = centerOf(other.rect)
+    return horizontal ? Math.abs(o.y - c.y) : Math.abs(o.x - c.x)
+  }
+
+  const perpOverlaps = (other: PositionedMockup): boolean => {
+    if (horizontal) {
+      return overlaps(
+        current.rect.y,
+        current.rect.y + current.rect.height,
+        other.rect.y,
+        other.rect.y + other.rect.height,
+      )
+    }
+    return overlaps(
+      current.rect.x,
+      current.rect.x + current.rect.width,
+      other.rect.x,
+      other.rect.x + other.rect.width,
+    )
+  }
+
+  // 1. Direct candidates strictly in `direction`
+  const forward = others.filter((m) => primaryDelta(m) > 10)
+  if (forward.length > 0) {
+    const aligned = forward.filter(perpOverlaps)
+    const pool = aligned.length > 0 ? aligned : forward
+    // For left/right without row overlap, stay on the same row only if wrapping instead of jumping rows diagonally
+    if (horizontal && aligned.length === 0) {
+      // Fall through to horizontal same-row wrap check below
+    } else {
+      pool.sort((a, b) => {
+        const scoreA = primaryDelta(a) + perpDistance(a) * (aligned.length > 0 ? 0.35 : 1.5)
+        const scoreB = primaryDelta(b) + perpDistance(b) * (aligned.length > 0 ? 0.35 : 1.5)
+        return scoreA - scoreB
+      })
+      return pool[0]!
+    }
+  }
+
+  // 2. Wrap around along the same row (left/right) or across rows (up/down)
+  const sameBand = others.filter(perpOverlaps)
+  const wrapPool = sameBand.length > 0 ? sameBand : others
+
+  if (direction === 'right') {
+    wrapPool.sort((a, b) => a.rect.x - b.rect.x || perpDistance(a) - perpDistance(b))
+    return wrapPool[0]!
+  }
+  if (direction === 'left') {
+    wrapPool.sort((a, b) => b.rect.x - a.rect.x || perpDistance(a) - perpDistance(b))
+    return wrapPool[0]!
+  }
+  if (direction === 'down') {
+    // Wrap to the topmost row, preferring closest horizontal alignment
+    const minY = Math.min(...others.map((m) => m.rect.y))
+    const topBand = others.filter((m) => Math.abs(m.rect.y - minY) < 120)
+    topBand.sort((a, b) => perpDistance(a) - perpDistance(b))
+    return topBand[0] ?? wrapPool[0]!
+  }
+
+  // direction === 'up': wrap to the bottommost row, preferring closest horizontal alignment
+  const maxY = Math.max(...others.map((m) => m.rect.y))
+  const bottomBand = others.filter((m) => Math.abs(m.rect.y - maxY) < 120)
+  bottomBand.sort((a, b) => perpDistance(a) - perpDistance(b))
+  return bottomBand[0] ?? wrapPool[0]!
+}

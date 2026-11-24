@@ -115,6 +115,10 @@ export interface MockupCanvasHandle {
   setNoteMode(enabled: boolean): void
   /** Read whether note mode is currently active. */
   isNoteMode(): boolean
+  /** Toggle or explicitly set changes navigation mode. */
+  setChangesMode(enabled: boolean): void
+  /** Read whether changes mode is currently active. */
+  isChangesMode(): boolean
   /** Mark which mockups have changes from the last turn (merges with item.changed). */
   setChangedMockups(mockupIds: string[]): void
   /** Read all current notes (open and resolved). */
