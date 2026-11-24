@@ -1,0 +1,303 @@
+/* mockup-canvas — calm, minimal, zero-blur infinite canvas chrome */
+
+.mc-root {
+  --mc-bg: #f4f4f2;
+  --mc-dot: #dcdcd8;
+  --mc-surface: #ffffff;
+  --mc-surface-muted: #f8f8f6;
+  --mc-border: #e2e2dd;
+  --mc-border-strong: #c9c9c2;
+  --mc-text: #18181b;
+  --mc-text-muted: #6e6e73;
+  --mc-active-bg: #18181b;
+  --mc-active-fg: #ffffff;
+  --mc-frame-bg: #ffffff;
+  --mc-font-sans: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+  --mc-font-mono: ui-monospace, 'SFMono-Regular', 'JetBrains Mono', Menlo, monospace;
+
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background-color: var(--mc-bg);
+  background-image: radial-gradient(circle, var(--mc-dot) 1px, transparent 1px);
+  background-size: 24px 24px;
+  color: var(--mc-text);
+  font-family: var(--mc-font-sans);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  cursor: grab;
+  box-sizing: border-box;
+}
+
+.mc-root *,
+.mc-root *::before,
+.mc-root *::after {
+  box-sizing: border-box;
+}
+
+.mc-root[data-mc-dragging='true'] {
+  cursor: grabbing;
+}
+
+@media (prefers-color-scheme: dark) {
+  .mc-root:not([data-mc-theme='light']) {
+    --mc-bg: #111113;
+    --mc-dot: #26262a;
+    --mc-surface: #1a1a1e;
+    --mc-surface-muted: #151518;
+    --mc-border: #2a2a30;
+    --mc-border-strong: #3e3e46;
+    --mc-text: #f2f2f0;
+    --mc-text-muted: #9898a0;
+    --mc-active-bg: #f2f2f0;
+    --mc-active-fg: #111113;
+    --mc-frame-bg: #16161a;
+  }
+}
+
+.mc-root[data-mc-theme='dark'] {
+  --mc-bg: #111113;
+  --mc-dot: #26262a;
+  --mc-surface: #1a1a1e;
+  --mc-surface-muted: #151518;
+  --mc-border: #2a2a30;
+  --mc-border-strong: #3e3e46;
+  --mc-text: #f2f2f0;
+  --mc-text-muted: #9898a0;
+  --mc-active-bg: #f2f2f0;
+  --mc-active-fg: #111113;
+  --mc-frame-bg: #16161a;
+}
+
+/* World layer transformed via translate3d + scale */
+.mc-world {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* Top-left multi-page switcher */
+.mc-pages {
+  position: fixed;
+  top: 16px;
+  left: 16px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+  max-width: calc(100vw - 96px);
+  overflow-x: auto;
+  cursor: default;
+}
+
+.mc-page-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--mc-text-muted);
+  font-family: var(--mc-font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 7px 11px;
+  border-radius: 5px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.mc-page-btn:hover {
+  color: var(--mc-text);
+}
+
+.mc-page-btn[aria-current='page'] {
+  background: var(--mc-surface-muted);
+  color: var(--mc-text);
+  font-weight: 600;
+}
+
+/* Top-right single recenter icon control */
+.mc-recenter {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mc-surface);
+  color: var(--mc-text-muted);
+  border: 1px solid var(--mc-border);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.mc-recenter:hover {
+  color: var(--mc-text);
+  border-color: var(--mc-border-strong);
+}
+
+.mc-recenter:focus-visible,
+.mc-page-btn:focus-visible,
+.mc-toggle-btn:focus-visible,
+.mc-mockup-id:focus-visible {
+  outline: 2px solid var(--mc-text);
+  outline-offset: 2px;
+}
+
+/* Group header: big type describing what the group is about */
+.mc-group-header {
+  position: absolute;
+  margin: 0;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  color: var(--mc-text);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* Mockup card = unified header + frame */
+.mc-mockup {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Small unified mockup header: ID + 1–2 word title left, static/active toggle right */
+.mc-mockup-header {
+  height: 34px;
+  padding: 0 2px 6px 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mc-mockup-meta {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mc-mockup-id {
+  font-family: var(--mc-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--mc-text);
+  text-decoration: none;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.mc-mockup-id:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.mc-mockup-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mc-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Compact static / active toggle right-aligned */
+.mc-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  background: var(--mc-surface);
+  border: 1px solid var(--mc-border);
+  border-radius: 6px;
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.mc-toggle-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--mc-text-muted);
+  font-family: var(--mc-font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 4px 7px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.mc-toggle-btn[aria-pressed='true'] {
+  background: var(--mc-surface-muted);
+  color: var(--mc-text);
+  font-weight: 600;
+}
+
+.mc-toggle-btn[data-mc-value='active'][aria-pressed='true'] {
+  background: var(--mc-active-bg);
+  color: var(--mc-active-fg);
+}
+
+/* Mockup viewport frame */
+.mc-frame {
+  position: relative;
+  overflow: hidden;
+  background: var(--mc-frame-bg);
+  border: 1px solid var(--mc-border);
+  border-radius: 6px;
+}
+
+.mc-frame-content {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* Static mode: zero mouse input reaches the mockup; everything stays on the canvas */
+.mc-mockup[data-mc-mode='static'] .mc-frame-content {
+  pointer-events: none;
+}
+
+.mc-static-shield {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: transparent;
+}
+
+.mc-mockup[data-mc-mode='active'] .mc-static-shield {
+  display: none;
+}
+
+.mc-root[data-mc-space='true'] .mc-mockup[data-mc-mode='active'] .mc-static-shield {
+  display: block;
+}
+
+.mc-root[data-mc-space='true'] {
+  cursor: grab;
+}
+
+.mc-mockup[data-mc-mode='active'] .mc-frame {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: auto;
+}

@@ -1,0 +1,161 @@
+// @vitest-environment jsdom
+/// <reference types="vite/client" />
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { mountMockupCanvas } from '../src/canvas'
+import stylesCss from '../src/styles.css?raw'
+import type { CanvasPage } from '../src/types'
+
+const PAGES: CanvasPage[] = [
+  {
+    id: 'checkout',
+    title: 'Checkout flow',
+    groups: [
+      {
+        title: 'Order summary',
+        items: [
+          { id: 'A.1', title: 'Default', width: 900, height: 560, src: '?state=order-default' },
+          { id: 'A.2', title: 'Mobile', width: 390, height: 640, src: '?state=order-mobile' },
+        ],
+      },
+      {
+        title: 'Payment states',
+        items: [{ id: 'B.1', title: 'Card form', width: 520, height: 500, src: '?state=card-form' }],
+      },
+    ],
+  },
+  {
+    id: 'passkeys',
+    title: 'Passkey setup',
+    groups: [
+      {
+        title: 'Enrollment',
+        items: [{ id: 'C.1', title: 'Admin list', width: 860, height: 520, src: '?state=admin-list' }],
+      },
+    ],
+  },
+]
+
+describe('mountMockupCanvas', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="root"></div>'
+    window.history.replaceState(null, '', '/')
+    window.sessionStorage.clear()
+  })
+
+  it('defaults every mockup to static with unified header (ID, title, static/active toggle)', () => {
+    const container = document.getElementById('root')!
+    const handle = mountMockupCanvas(container, { pages: PAGES })
+
+    const cards = container.querySelectorAll<HTMLElement>('.mc-mockup')
+    expect(cards.length).toBe(3)
+
+    const first = cards[0]!
+    expect(first.dataset.mcMode).toBe('static')
+    expect(first.querySelector('.mc-mockup-id')?.textContent).toBe('A.1')
+    expect(first.querySelector('.mc-mockup-title')?.textContent).toBe('Default')
+
+    const [staticBtn, activeBtn] = Array.from(first.querySelectorAll<HTMLButtonElement>('.mc-toggle-btn'))
+    expect(staticBtn?.getAttribute('aria-pressed')).toBe('true')
+    expect(activeBtn?.getAttribute('aria-pressed')).toBe('false')
+
+    activeBtn?.click()
+    expect(first.dataset.mcMode).toBe('active')
+    expect(activeBtn?.getAttribute('aria-pressed')).toBe('true')
+    expect(staticBtn?.getAttribute('aria-pressed')).toBe('false')
+
+    handle.destroy()
+  })
+
+  it('renders big-type group headers and switches pages cleanly', () => {
+    const container = document.getElementById('root')!
+    const handle = mountMockupCanvas(container, { pages: PAGES })
+
+    const groupTitles = Array.from(container.querySelectorAll('.mc-group-header')).map((el) => el.textContent)
+    expect(groupTitles).toEqual(['Order summary', 'Payment states'])
+
+    const passkeyBtn = container.querySelector<HTMLButtonElement>('[data-mc-page-id="passkeys"]')!
+    passkeyBtn.click()
+    expect(handle.getActivePageId()).toBe('passkeys')
+    expect(container.querySelectorAll('.mc-mockup').length).toBe(1)
+    expect(container.querySelector('.mc-mockup-id')?.textContent).toBe('C.1')
+
+    handle.destroy()
+  })
+
+  it('deep-links to a target mockup by panning ONLY without changing zoom scale', () => {
+    const container = document.getElementById('root')!
+    const handle = mountMockupCanvas(container, { pages: PAGES })
+
+    // Simulate user zooming to a custom scale via ctrl+wheel
+    const rootEl = container.querySelector('.mc-root')!
+    rootEl.dispatchEvent(
+      new WheelEvent('wheel', { ctrlKey: true, deltaY: -60, clientX: 500, clientY: 300, cancelable: true }),
+    )
+    const zoomedScale = handle.getViewport().scale
+    expect(zoomedScale).not.toBe(1)
+
+    // Now deep-link to a mockup on another page: scale MUST stay identical
+    handle.goTo({ pageId: 'passkeys', mockupId: 'C.1', animate: false })
+    expect(handle.getActivePageId()).toBe('passkeys')
+    expect(handle.getViewport().scale).toBeCloseTo(zoomedScale, 6)
+
+    // And deep-link to another mockup on checkout: scale still stays identical
+    handle.goTo({ mockupId: 'B.1', animate: false })
+    expect(handle.getActivePageId()).toBe('checkout')
+    expect(handle.getViewport().scale).toBeCloseTo(zoomedScale, 6)
+
+    handle.destroy()
+  })
+
+  it('recenters to fit all mockups on the current page via the top-right recenter button', () => {
+    vi.useFakeTimers()
+    try {
+      const container = document.getElementById('root')!
+      const handle = mountMockupCanvas(container, { pages: PAGES })
+      const initial = handle.getViewport()
+
+      const rootEl = container.querySelector('.mc-root')!
+      rootEl.dispatchEvent(new WheelEvent('wheel', { deltaX: 500, deltaY: 400, cancelable: true }))
+      const panned = handle.getViewport()
+      expect(panned.tx).not.toBe(initial.tx)
+
+      const recenterBtn = container.querySelector<HTMLButtonElement>('.mc-recenter')!
+      recenterBtn.click()
+      vi.advanceTimersByTime(300)
+
+      const recentered = handle.getViewport()
+      expect(recentered.tx).toBeCloseTo(initial.tx, 2)
+      expect(recentered.ty).toBeCloseTo(initial.ty, 2)
+      expect(recentered.scale).toBeCloseTo(initial.scale, 4)
+
+      handle.destroy()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('captures wheel events over static mockups and passes them through when active', () => {
+    const container = document.getElementById('root')!
+    const handle = mountMockupCanvas(container, { pages: PAGES })
+    const frame = container.querySelector<HTMLElement>('[data-mc-mockup-id="A.1"] .mc-frame')!
+
+    const beforeStatic = handle.getViewport()
+    const staticWheel = new WheelEvent('wheel', { deltaX: 40, deltaY: 60, bubbles: true, cancelable: true })
+    frame.dispatchEvent(staticWheel)
+    expect(staticWheel.defaultPrevented).toBe(true)
+    expect(handle.getViewport().tx).toBe(beforeStatic.tx - 40)
+
+    handle.setMockupMode('A.1', 'active')
+    const beforeActive = handle.getViewport()
+    const activeWheel = new WheelEvent('wheel', { deltaX: 40, deltaY: 60, bubbles: true, cancelable: true })
+    frame.dispatchEvent(activeWheel)
+    expect(activeWheel.defaultPrevented).toBe(false)
+    expect(handle.getViewport().tx).toBe(beforeActive.tx)
+
+    handle.destroy()
+  })
+
+  it('contains zero blur() calls anywhere in styles.css', () => {
+    expect(stylesCss).not.toMatch(/blur\s*\(/i)
+  })
+})
