@@ -115,6 +115,28 @@ export function computeFillMockup(
 }
 
 /**
+ * Navigate to a target mockup while preserving current zoom whenever the target fits horizontally;
+ * if the target is wider than the viewport at the current zoom, zooms out to fill-width so nothing clips left/right.
+ */
+export function computeNavigateToMockup(
+  target: Rect,
+  currentScale: number,
+  viewportWidth: number,
+  viewportHeight: number,
+  edgePadding = MOCKUP_EDGE_PADDING,
+): Viewport {
+  const safeScale = clampScale(currentScale)
+  if (target.width <= 0 || target.height <= 0 || viewportWidth <= 0 || viewportHeight <= 0) {
+    return computePanToTarget(target, safeScale, viewportWidth, viewportHeight)
+  }
+  const availW = Math.max(1, viewportWidth - edgePadding * 2)
+  if (target.width * safeScale > availW) {
+    return computeFillMockup(target, viewportWidth, viewportHeight, edgePadding)
+  }
+  return computePanToTarget(target, safeScale, viewportWidth, viewportHeight)
+}
+
+/**
  * Pan ONLY (never changes scale) to bring a target mockup into view.
  * Horizontally centers the mockup; vertically centers it unless the mockup is taller
  * than the available viewport at the current zoom, in which case its top header stays visible.

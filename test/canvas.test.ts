@@ -307,22 +307,21 @@ describe('mountMockupCanvas', () => {
     expect(checkoutDot.hidden).toBe(false)
     expect(passkeysDot.hidden).toBe(true)
 
-    // Normal mode (changesMode OFF): arrow keys navigate spatially on the current page and fill-width the target
+    // Normal mode (changesMode OFF): arrow keys preserve zoom when target fits, and shrink to fill-width if overflowing
     vi.useFakeTimers()
     try {
+      const startScale = handle.getViewport().scale
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
       vi.advanceTimersByTime(300)
       expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
-      const a1Scale = handle.getViewport().scale
+      expect(handle.getViewport().scale).toBeCloseTo(startScale, 6)
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
       vi.advanceTimersByTime(300)
       expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
-      const a2FillScale = handle.getViewport().scale
-      // Portrait A.2 (390w) fills width at a larger scale than desktop A.1 (900w)
-      expect(a2FillScale).toBeGreaterThan(a1Scale)
+      expect(handle.getViewport().scale).toBeCloseTo(startScale, 6)
 
-      // Tapping Shift on tall portrait A.2 toggles between fit (full height visible) and fill-width
+      // Tapping Shift on tall portrait A.2 zooms to fit; tapping Shift again toggles to fill-width
       const tapShift = () => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }))
         window.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift' }))
@@ -330,9 +329,9 @@ describe('mountMockupCanvas', () => {
       }
       tapShift()
       const a2FitScale = handle.getViewport().scale
-      expect(a2FitScale).toBeLessThan(a2FillScale)
       tapShift()
-      expect(handle.getViewport().scale).toBeCloseTo(a2FillScale, 4)
+      const a2FillScale = handle.getViewport().scale
+      expect(a2FillScale).toBeGreaterThan(a2FitScale)
 
       // Shift+other key does NOT trigger shift-tap zoom
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift' }))
@@ -341,10 +340,12 @@ describe('mountMockupCanvas', () => {
       vi.advanceTimersByTime(300)
       expect(handle.getViewport().scale).toBeCloseTo(a2FillScale, 4)
 
-      // Wrap sideways back to A.1, then Down to B.1, Up back to A.1
+      // Now zoomed way in on A.2 (a2FillScale), stepping back to wide A.1 shrinks cleanly to fill-width
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
       vi.advanceTimersByTime(300)
       expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
+      expect(handle.getViewport().scale).toBeLessThan(a2FillScale)
+
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
       vi.advanceTimersByTime(300)
       expect(new URLSearchParams(window.location.search).get('mockup')).toBe('B.1')
@@ -367,7 +368,7 @@ describe('mountMockupCanvas', () => {
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c' }))
     expect(handle.isChangesMode()).toBe(true)
 
-    // Zoom way out first so we prove Changes navigation fills width on the target screen
+    // Zoom way out first so A.2 fits comfortably -> Changes navigation preserves that zoom
     const rootEl = container.querySelector('.mc-root')!
     rootEl.dispatchEvent(
       new WheelEvent('wheel', { ctrlKey: true, deltaY: 120, clientX: 500, clientY: 300, cancelable: true }),
@@ -382,7 +383,7 @@ describe('mountMockupCanvas', () => {
       vi.advanceTimersByTime(300)
       expect(handle.getActivePageId()).toBe('checkout')
       expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
-      expect(handle.getViewport().scale).toBeGreaterThan(tinyScale)
+      expect(handle.getViewport().scale).toBeCloseTo(tinyScale, 6)
 
       window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
       vi.advanceTimersByTime(300)

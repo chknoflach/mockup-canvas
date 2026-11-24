@@ -6,6 +6,7 @@ import {
   computeFillMockup,
   computeFitMockup,
   computeFitViewport,
+  computeNavigateToMockup,
   computePanToTarget,
   panBy,
   zoomAtPoint,
@@ -85,5 +86,18 @@ describe('viewport math', () => {
     expect(phoneFit.scale).toBeLessThan(phoneFill.scale)
     expect(phoneFit.ty + tallPhone.height * phoneFit.scale).toBeLessThanOrEqual(980 - 15)
     expect(phoneFill.ty).toBe(64)
+  })
+
+  it('preserves zoom during smart navigation when target fits width, and zooms to fill-width when it overflows', () => {
+    const mobile = { x: 0, y: 0, width: 390, height: 674 }
+    const desktop = { x: 500, y: 0, width: 900, height: 594 }
+
+    // Stepping from desktop (0.8x) to mobile (390w fits easily in 800px): preserves 0.8x
+    const toMobile = computeNavigateToMockup(mobile, 0.8, 800, 980)
+    expect(toMobile.scale).toBeCloseTo(0.8, 6)
+
+    // Stepping from zoomed-in mobile (1.8x) to desktop (900w * 1.8 = 1620 > 768): shrinks to fill-width
+    const toDesktop = computeNavigateToMockup(desktop, 1.8, 800, 980)
+    expect(toDesktop.scale).toBeCloseTo((800 - 32) / 900, 4)
   })
 })

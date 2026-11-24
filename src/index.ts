@@ -13,6 +13,7 @@ export {
   computeFillMockup,
   computeFitMockup,
   computeFitViewport,
+  computeNavigateToMockup,
   computePanToTarget,
   panBy,
   zoomAtPoint,
