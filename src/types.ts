@@ -105,8 +105,8 @@ export interface Rect {
 }
 
 export interface MockupCanvasHandle {
-  /** Switch to a page by ID; optionally pan (without zooming) to a mockup ID. */
-  goTo(options: { pageId?: string; mockupId?: string; animate?: boolean }): void
+  /** Switch to a page by ID; optionally pan (or zoom-to-fit when fit=true) to a mockup ID. */
+  goTo(options: { pageId?: string; mockupId?: string; animate?: boolean; fit?: boolean }): void
   /** Zoom and center the view so all mockups on the current page fit cleanly in view. */
   recenter(animate?: boolean): void
   /** Set a specific mockup's static/active mode. */

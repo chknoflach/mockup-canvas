@@ -314,48 +314,73 @@ describe('mountMockupCanvas', () => {
     expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.1')
     expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
 
+    // Keyboard zoom using the two physical keys next to right Shift (Period = out, Slash = in)
+    const beforeKeyZoom = handle.getViewport().scale
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Slash', key: '-' }))
+    const zoomedInScale = handle.getViewport().scale
+    expect(zoomedInScale).toBeGreaterThan(beforeKeyZoom)
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'Period', key: '.' }))
+    expect(handle.getViewport().scale).toBeCloseTo(beforeKeyZoom, 6)
+
     // Press 'c' to enter Changes mode
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c' }))
     expect(handle.isChangesMode()).toBe(true)
 
-    // In Changes mode: Right/Left step across changed screens with full wrap-around
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
-    expect(handle.getActivePageId()).toBe('checkout')
-    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
+    // Zoom way out first so we prove Changes navigation zooms to fit the target screen
+    rootEl.dispatchEvent(
+      new WheelEvent('wheel', { ctrlKey: true, deltaY: 120, clientX: 500, clientY: 300, cancelable: true }),
+    )
+    const tinyScale = handle.getViewport().scale
+    expect(tinyScale).toBeLessThan(0.5)
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
-    expect(handle.getActivePageId()).toBe('passkeys')
-    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('C.1')
+    // In Changes mode: Right/Left step across changed screens with wrap-around AND zoom to fit
+    vi.useFakeTimers()
+    try {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      vi.advanceTimersByTime(300)
+      expect(handle.getActivePageId()).toBe('checkout')
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
+      expect(handle.getViewport().scale).toBeGreaterThan(tinyScale)
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
-    expect(handle.getActivePageId()).toBe('checkout')
-    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      vi.advanceTimersByTime(300)
+      expect(handle.getActivePageId()).toBe('passkeys')
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('C.1')
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
-    expect(handle.getActivePageId()).toBe('passkeys')
-    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('C.1')
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight' }))
+      vi.advanceTimersByTime(300)
+      expect(handle.getActivePageId()).toBe('checkout')
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
 
-    // Down arrow opens the changed list; Up/Down navigate with wrap-around WITHOUT panning; Enter confirms
-    const menu = container.querySelector<HTMLElement>('.mc-changed-menu')!
-    const beforeMenu = handle.getViewport()
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
-    expect(menu.hidden).toBe(false)
-    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('C.1')
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }))
+      vi.advanceTimersByTime(300)
+      expect(handle.getActivePageId()).toBe('passkeys')
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('C.1')
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
-    expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('A.2')
-    expect(handle.getActivePageId()).toBe('passkeys')
-    expect(handle.getViewport()).toEqual(beforeMenu)
+      // Down arrow opens the changed list; Up/Down navigate with wrap-around WITHOUT panning; Enter confirms & zooms to fit
+      const menu = container.querySelector<HTMLElement>('.mc-changed-menu')!
+      const beforeMenu = handle.getViewport()
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      expect(menu.hidden).toBe(false)
+      expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('C.1')
 
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
-    expect(menu.hidden).toBe(true)
-    expect(handle.getActivePageId()).toBe('checkout')
-    expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
-    expect(handle.getViewport().scale).toBeCloseTo(customScale, 6)
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+      expect(menu.querySelector<HTMLElement>('[data-mc-highlighted="true"]')?.dataset.mcChangedTarget).toBe('A.2')
+      expect(handle.getActivePageId()).toBe('passkeys')
+      expect(handle.getViewport()).toEqual(beforeMenu)
 
-    // Escape exits changes mode when menu is closed
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
-    expect(handle.isChangesMode()).toBe(false)
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+      vi.advanceTimersByTime(300)
+      expect(menu.hidden).toBe(true)
+      expect(handle.getActivePageId()).toBe('checkout')
+      expect(new URLSearchParams(window.location.search).get('mockup')).toBe('A.2')
+
+      // Escape exits changes mode when menu is closed
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+      expect(handle.isChangesMode()).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
 
     handle.destroy()
   })

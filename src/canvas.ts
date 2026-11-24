@@ -582,7 +582,7 @@ export function mountMockupCanvas(
     }
     setChangedMenuOpen(false)
     focusedChangedId = target.mockupId
-    goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true })
+    goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true, fit: true })
     renderChangedControls()
   }
 
@@ -677,7 +677,7 @@ export function mountMockupCanvas(
     const target = list[nextIndex]!
     setChangedMenuOpen(false)
     focusedChangedId = target.mockupId
-    goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true })
+    goTo({ pageId: target.pageId, mockupId: target.mockupId, animate: true, fit: true })
     renderChangedControls()
   }
 
@@ -999,7 +999,12 @@ export function mountMockupCanvas(
     }
   }
 
-  function goTo(options: { pageId?: string; mockupId?: string; animate?: boolean }): void {
+  function goTo(options: {
+    pageId?: string
+    mockupId?: string
+    animate?: boolean
+    fit?: boolean
+  }): void {
     const resolved = resolveTarget(
       pages,
       { pageId: options.pageId ?? null, mockupId: options.mockupId ?? null },
@@ -1019,8 +1024,9 @@ export function mountMockupCanvas(
       const targetItem = activeLayout.byId.get(resolved.mockupId)
       if (targetItem) {
         focusedMockupId = resolved.mockupId
-        // Deep-linking pans ONLY — current zoom scale is strictly preserved.
-        const targetViewport = computePanToTarget(targetItem.rect, viewport.scale, width, height)
+        const targetViewport = options.fit
+          ? computeFitViewport(targetItem.rect, width, height, 64)
+          : computePanToTarget(targetItem.rect, viewport.scale, width, height)
         animateTo(targetViewport, options.animate ?? !pageChanged)
         syncUrl(resolved.page.id, resolved.mockupId)
         return
@@ -1267,6 +1273,17 @@ export function mountMockupCanvas(
       if ((e.key === 'n' || e.key === 'N') && !e.repeat) {
         e.preventDefault()
         setNoteMode(!noteMode)
+        return
+      }
+
+      // Physical keys directly left of Right Shift across keyboard layouts:
+      // Period (left) = zoom out, Slash (right) = zoom in.
+      if (e.code === 'Period' || e.code === 'Slash') {
+        e.preventDefault()
+        cancelAnimation()
+        const { width, height } = getSize()
+        const factor = e.code === 'Slash' ? 1.25 : 1 / 1.25
+        applyViewport(zoomAtPoint(viewport, viewport.scale * factor, width / 2, height / 2))
         return
       }
 
